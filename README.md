@@ -7,23 +7,29 @@
 - 資料庫：Firebase Firestore + Firebase Auth
 - 部署：GitHub Pages（`npm run deploy`）
 
-## 部署到 GitHub Pages
+## 部署（Vercel）
 
-```bash
-npm run build     # 產出 dist/
-npm run deploy    # 把 dist 推到 gh-pages 分支
-```
+repo：`https://github.com/krad1985/buke-app`（private，branch `master`）
 
-第一次部署：
+Vercel 會自動辨識 Vite，設定照預設即可：
 
-1. `git remote add origin https://github.com/<帳號>/<repo>.git`
-2. `git push -u origin master`
-3. `npm run deploy`
-4. repo → Settings → Pages → Source 選 `gh-pages` 分支
-5. 網址：`https://<帳號>.github.io/<repo>/`
-6. 把這個網域加進 Firebase → Authentication → Settings → 已授權網域
+| 項目 | 值 |
+| --- | --- |
+| Framework Preset | Vite |
+| Build Command | `npm run build` |
+| Output Directory | `dist` |
+| Install Command | `npm install` |
 
-之後每次改版只要 `npm run deploy`。因為用 hash 路由（`/#/c/...`），重整頁面不會 404，不需要 404.html 轉址。
+因為用 hash 路由（`/#/c/...`），重整頁面不會 404，不需要加 rewrite 規則。
+
+**部署後必做兩件事**：
+
+1. 把 Vercel 網域加進 Firebase → Authentication → Settings → 已授權網域。
+2. 之後每次換自訂網域都要重做第 1 步。
+
+**Preview 部署的注意事項**：Vercel 每次 PR 會產生隨機網域（`xxx-git-branch-user.vercel.app`），Firebase 授權網域不支援萬用字元，所以**在 preview 網址登入管理後台會失敗**。學員端不受影響（課程與進度的規則不需要登入）。要做後台設定請用 production 網域。
+
+`npm run deploy`（gh-pages）仍留在 package.json，但目前不使用；若之後改回 GitHub Pages，public repo 才能免費開 Pages。
 
 ## 補課時數
 
