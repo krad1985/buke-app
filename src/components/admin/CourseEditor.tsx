@@ -209,7 +209,7 @@ export default function CourseEditor({ course, onSaved, onCancel }: Props) {
                     checked={draft.isPublished}
                     onChange={(e) => patch({ isPublished: e.target.checked })}
                   />
-                  <span>上架（學員看得到）</span>
+                  <span>上架</span>
                 </label>
                 <label className="checkline">
                   <input
@@ -221,9 +221,7 @@ export default function CourseEditor({ course, onSaved, onCancel }: Props) {
                 </label>
               </div>
             </div>
-            <p className="hint">
-              影片 ID 是網址 <code>watch?v=</code> 後面那串；影片需設為「公開」或「不公開」。
-            </p>
+            <p className="hint">影片需為「公開」或「不公開」。</p>
           </section>
 
           <section className="panel">
@@ -233,9 +231,6 @@ export default function CourseEditor({ course, onSaved, onCancel }: Props) {
                 ＋ 新增段落
               </button>
             </div>
-            <p className="hint">
-              段落長度依內容自行決定，沒有固定值。段落之間請首尾相接；最後一段可以超過片長。
-            </p>
             <div className="seg-list">
               {draft.segments.map((seg, i) => (
                 <SegmentCard
@@ -251,7 +246,7 @@ export default function CourseEditor({ course, onSaved, onCancel }: Props) {
                   onDuplicate={() => duplicateSegment(i)}
                 />
               ))}
-              {draft.segments.length === 0 && <p className="hint">還沒有段落，按「新增段落」開始。</p>}
+              {draft.segments.length === 0 && <p className="hint">尚無段落。</p>}
             </div>
           </section>
         </div>

@@ -26,7 +26,8 @@ export function loadSession(): AdminProfile | null {
 
 export function saveSession(profile: AdminProfile): void {
   try {
-    sessionStorage.setItem(SESSION_KEY, JSON.stringify(profile));
+    // session 不保留密碼：只記登入狀態所需的身分欄位
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify({ ...profile, pass: '' }));
   } catch {
     /* 無痕模式 */
   }
@@ -40,12 +41,11 @@ export function clearSession(): void {
   }
 }
 
-/** 第一次使用：建立預設的課程管理員 admin / admin */
+/** 資料庫裡完全沒有管理員時，建立預設的 admin 帳號 */
 export async function ensureDefaultAdmin(): Promise<void> {
-  const ref = adminRef('admin');
-  const snap = await getDoc(ref);
-  if (snap.exists()) return;
-  await setDoc(ref, {
+  const snap = await getDocs(collection(db, 'admins'));
+  if (!snap.empty) return;
+  await setDoc(doc(db, 'admins', 'admin'), {
     account: 'admin',
     name: '系統管理員',
     role: 'course' as AdminRole,

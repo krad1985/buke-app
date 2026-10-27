@@ -85,9 +85,6 @@ export default function PasswordTab({ profile, onChanged }: Props) {
             {busy ? '更新中…' : '更新密碼'}
           </button>
         </form>
-        <p className="hint" style={{ marginTop: 12 }}>
-          忘記密碼：請課程管理員在「管理員」頁直接改一組新的。
-        </p>
       </div>
     </div>
   );

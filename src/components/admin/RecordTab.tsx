@@ -125,14 +125,7 @@ export default function RecordTab({ profile }: Props) {
   return (
     <div className="admin-home">
       <div className="admin-toolbar">
-        <div>
-          <h2>補課記錄</h2>
-          <p className="hint">
-            {profile.role === 'region'
-              ? `「${fixedRegion}」學員的補課總表。✓ 表示該課程已完課，3/5 表示已通過 3 段。`
-              : '每位學員一列，各課程一欄。✓ 表示已完課，3/5 表示已通過 3 段。'}
-          </p>
-        </div>
+        <h2>補課記錄</h2>
         <div className="row-gap">
           {profile.role === 'course' && (
             <label className="field inline">
@@ -189,9 +182,9 @@ export default function RecordTab({ profile }: Props) {
           {error && <p className="form-error">{error}</p>}
 
           {records === null ? (
-            <p className="hint">按「讀取」載入補課狀況。</p>
+            <p className="hint">尚未讀取。</p>
           ) : rows.length === 0 ? (
-            <p className="hint">沒有資料。若是剛匯入名單，請確認名單是否在同一區域。</p>
+            <p className="hint">沒有資料。</p>
           ) : (
             <>
               <div className="table-scroll">

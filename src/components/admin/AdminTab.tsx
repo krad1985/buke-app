@@ -78,12 +78,7 @@ export default function AdminTab({ profile }: Props) {
   return (
     <div className="admin-home">
       <div className="admin-toolbar">
-        <div>
-          <h2>管理員</h2>
-          <p className="hint">
-            課程管理員可維護課程與管理員；區域管理員只能匯入自己區域的名單、匯出自己區域的記錄。
-          </p>
-        </div>
+        <h2>管理員</h2>
       </div>
 
       {error && <p className="form-error">{error}</p>}
@@ -102,7 +97,6 @@ export default function AdminTab({ profile }: Props) {
                   <th>姓名</th>
                   <th>角色</th>
                   <th>區域</th>
-                  <th>密碼</th>
                   <th>狀態</th>
                   <th />
                 </tr>
@@ -114,7 +108,6 @@ export default function AdminTab({ profile }: Props) {
                     <td>{a.name}</td>
                     <td>{a.role === 'course' ? '課程管理員' : '區域管理員'}</td>
                     <td>{a.region || '—'}</td>
-                    <td className="mono">{a.pass}</td>
                     <td>
                       <span className={`state-dot ${a.enabled === false ? 'idle' : 'done'}`}>
                         {a.enabled === false ? '已停用' : '啟用中'}
@@ -234,9 +227,6 @@ export default function AdminTab({ profile }: Props) {
             </button>
           </div>
         </form>
-        <p className="hint">
-          密碼以明文儲存，這裡看得到也改得動；忘記密碼由課程管理員直接改一組新的即可。
-        </p>
       </div>
     </div>
   );

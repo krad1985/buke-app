@@ -16,7 +16,6 @@ export const mockCourses: Course[] = [
     isPublished: true,
     sortOrder: 1,
     allowRewatch: true,
-    isMock: true,
     segments: [
       {
         segIndex: 0,
@@ -133,7 +132,6 @@ export const mockCourses: Course[] = [
     isPublished: true,
     sortOrder: 2,
     allowRewatch: true,
-    isMock: true,
     segments: [
       {
         segIndex: 0,

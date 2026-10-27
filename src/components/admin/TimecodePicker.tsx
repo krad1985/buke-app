@@ -75,7 +75,7 @@ export default function TimecodePicker({ videoId, onTick }: Props) {
     <div className="admin-picker">
       <div className="admin-picker-video">
         <div ref={hostRef} className="player-host" />
-        {!videoId && <p className="hint pad">先填入 YouTube 影片 ID，這裡會出現播放器。</p>}
+        {!videoId && <p className="hint pad">填入影片 ID 後顯示播放器。</p>}
         {videoId && !ready && !error && <p className="hint pad">播放器載入中…</p>}
         {error && <p className="hint pad warn-text">{error}</p>}
       </div>
@@ -91,9 +91,7 @@ export default function TimecodePicker({ videoId, onTick }: Props) {
             播放 / 暫停
           </button>
         </div>
-        <p className="hint">
-          播到要切的位置，再到下面的段落按「用目前時間」。段落可用的時間碼都可以直接打（例如 12:30）。
-        </p>
+        <p className="hint">播到位置後，按段落的「用目前時間」。</p>
       </div>
     </div>
   );

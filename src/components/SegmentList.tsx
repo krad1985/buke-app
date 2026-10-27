@@ -14,9 +14,6 @@ export default function SegmentList({ segments, activeIndex, passed, allowRewatc
     <aside className="panel segment-panel">
       <div className="panel-head">
         <h2>課程段落</h2>
-        <p className="hint">
-          已通過 {passed.length} / {segments.length} 段
-        </p>
       </div>
       <ol className="segment-list">
         {segments.map((seg) => {

@@ -916,6 +916,11 @@ textarea.input {
   font-size: 13.5px;
 }
 
+.checkline.span2 {
+  gap: 22px;
+  flex-wrap: wrap;
+}
+
 .span2 {
   grid-column: 1 / -1;
 }
@@ -1209,6 +1214,11 @@ textarea.input {
 .gate-note {
   text-align: center;
   margin-top: 14px;
+}
+
+.gate-skip {
+  text-align: center;
+  margin-top: 16px;
 }
 
 .admin-shell {

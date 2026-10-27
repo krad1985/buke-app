@@ -43,11 +43,6 @@ export async function listStudentsInRegion(region: string): Promise<Student[]> {
     .sort((a, b) => a.phoneKey.localeCompare(b.phoneKey));
 }
 
-export async function listRegions(): Promise<string[]> {
-  const snap = await getDocs(collection(db, 'regions'));
-  return snap.docs.map((d) => d.id).sort((a, b) => a.localeCompare(b));
-}
-
 export async function saveStudent(student: Student): Promise<void> {
   await setDoc(studentDoc(student.region, student.phoneKey), {
     ...student,

@@ -105,12 +105,8 @@ export default function StudentTab({ profile }: Props) {
   return (
     <div className="admin-home">
       <div className="admin-toolbar">
-        <div>
-          <h2>學員名單</h2>
-          <p className="hint">
-            {profile.role === 'region' ? `你只能管理「${fixedRegion}」的名單。` : '選擇區域後即可匯入該區名單。'}
-          </p>
-        </div>
+        <h2>學員名單</h2>
+        {profile.role === 'region' && <span className="hint">{fixedRegion}</span>}
         {profile.role === 'course' && (
           <label className="field inline">
             <span>區域</span>
@@ -136,7 +132,7 @@ export default function StudentTab({ profile }: Props) {
 
       {!region ? (
         <div className="panel empty-state">
-          <p>請先選擇要管理的區域。</p>
+          <p>請先選擇區域。</p>
         </div>
       ) : (
         <>
@@ -159,8 +155,7 @@ export default function StudentTab({ profile }: Props) {
               </div>
             </div>
             <p className="hint">
-              範本欄位：uid、區域、教室、組別、身份、姓名、電話。可直接用 Excel 填好後複製整塊貼到下方，
-              或另存 CSV 後用「選擇檔案」。區域欄可留空，一律以本頁選擇的「{region}」為準。
+              欄位：uid、區域、教室、組別、身份、姓名、電話。區域以本頁選擇的「{region}」為準。
             </p>
             <textarea
               className="input mono"
@@ -249,9 +244,6 @@ export default function StudentTab({ profile }: Props) {
                 </table>
               </div>
             )}
-            <p className="hint" style={{ marginTop: 10 }}>
-              要修改某位學員的資料，直接重新匯入該筆（同電話會覆蓋）。
-            </p>
           </div>
         </>
       )}

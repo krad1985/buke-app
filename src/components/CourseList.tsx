@@ -27,8 +27,7 @@ export default function CourseList({ courses, progress, onSelect }: Props) {
   return (
     <div className="course-list">
       <div className="list-head">
-        <h1>選一門課開始</h1>
-        <p className="hint">目前為匿名上課，不需要登入；進度會存在這台裝置並同步到雲端。</p>
+        <h1>課程</h1>
       </div>
 
       <div className="cards">

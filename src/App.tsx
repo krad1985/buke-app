@@ -178,7 +178,7 @@ export default function App() {
           <>
             {!student && (
               <div className="notice warn" style={{ marginBottom: 16 }}>
-                目前是「先看看課程」模式，進度不會寫入補課記錄。
+                訪客模式，不記錄進度。
                 <button className="link-btn" onClick={handleSwitchStudent}>
                   輸入手機號碼
                 </button>
@@ -200,9 +200,7 @@ export default function App() {
       </main>
 
       <footer className="app-footer">
-        <span>進度以手機號碼記錄。</span>
-        <span className="dot">·</span>
-        <a href="#/admin">管理後台</a>
+        {route.view !== 'admin' && <a href="#/admin">管理後台</a>}
       </footer>
     </div>
   );

@@ -329,7 +329,6 @@ export default function LessonView({ course, initialProgress, onSaveProgress, on
           <p className="hint">
             已通過 {totalDone} / {segments.length} 段
             {watchedSec > 0 && <>・已補 {fmtDuration(watchedSec)}</>}
-            {course.isMock && <span className="chip subtle">示範資料</span>}
           </p>
         </div>
       </div>
@@ -348,7 +347,6 @@ export default function LessonView({ course, initialProgress, onSaveProgress, on
             {loadError && (
               <div className="player-overlay error">
                 <p>{loadError}</p>
-                <p className="hint">影片需設為「公開」或「不公開」才能嵌入。</p>
               </div>
             )}
 
@@ -358,9 +356,6 @@ export default function LessonView({ course, initialProgress, onSaveProgress, on
                   {activeSeg ? `第 ${activeSeg.segIndex + 1} 段，共 ${segments.length} 段` : '準備開始'}
                 </p>
                 <h2>{activeSeg?.title ?? '課程'}</h2>
-                <p className="hint">
-                  看完本段後會跳出題目，答對才會繼續播放下一段。
-                </p>
                 <button className="btn primary big" onClick={handleStart}>
                   開始上課
                 </button>
@@ -386,9 +381,7 @@ export default function LessonView({ course, initialProgress, onSaveProgress, on
 
           {reviewIndex !== null && reviewSeg && (
             <div className="notice review">
-              <span>
-                正在重看第 {reviewSeg.segIndex + 1} 段（{reviewSeg.title}），本段結束後會自動回到目前進度。
-              </span>
+              <span>重看第 {reviewSeg.segIndex + 1} 段</span>
               <button className="btn tiny" onClick={backToCurrent}>
                 回到目前進度
               </button>
@@ -397,8 +390,7 @@ export default function LessonView({ course, initialProgress, onSaveProgress, on
 
           {outOfRange && (
             <p className="notice warn">
-              設定的段落起點（{fmtTime(activeSeg?.startSec ?? 0)}）已超過影片長度（
-              {fmtTime(duration)}），請確認後台的時間碼。
+              段落起點（{fmtTime(activeSeg?.startSec ?? 0)}）超過影片長度（{fmtTime(duration)}）。
             </p>
           )}
 
@@ -465,14 +457,6 @@ export default function LessonView({ course, initialProgress, onSaveProgress, on
               onContinue={handleContinue}
               onRewatch={handleRewatch}
             />
-          )}
-
-          {phase === 'intro' && (
-            <div className="panel">
-              <p className="hint">
-                本課程共 {segments.length} 段，每段結束時會暫停並出題。答錯可以重看本段再回來作答。
-              </p>
-            </div>
           )}
         </div>
 

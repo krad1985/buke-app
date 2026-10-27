@@ -40,7 +40,3 @@ export function saveLocal(progress: CourseProgress) {
     /* 無痕模式或配額滿時靜默失敗 */
   }
 }
-
-export function loadProgressLocal(courseId: string): CourseProgress {
-  return readStore()[courseId] ?? emptyProgress(courseId);
-}

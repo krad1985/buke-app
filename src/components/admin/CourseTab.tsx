@@ -31,9 +31,7 @@ export default function CourseTab() {
     try {
       const { mockCourses } = await import('../../data/mockCourses');
       for (const c of mockCourses) {
-        const payload = { ...c, isPublished: false };
-        delete payload.isMock;
-        await saveCourse(payload);
+        await saveCourse({ ...c, isPublished: false });
       }
       reload();
     } catch (e) {
@@ -100,10 +98,7 @@ export default function CourseTab() {
   return (
     <div className="admin-home">
       <div className="admin-toolbar">
-        <div>
-          <h2>課程與題庫</h2>
-          <p className="hint">學員端只看得到「已上架」的課程。</p>
-        </div>
+        <h2>課程與題庫</h2>
         <div className="row-gap">
           <button className="btn small" onClick={handleExport} disabled={busy || !courses?.length}>
             匯出備份
@@ -132,7 +127,7 @@ export default function CourseTab() {
         <p className="hint">載入中…</p>
       ) : courses.length === 0 ? (
         <div className="panel empty-state">
-          <p>還沒有課程。可以「新增課程」從空白開始，或「載入示範課程」先看格式。</p>
+          <p>還沒有課程。</p>
         </div>
       ) : (
         <div className="panel">

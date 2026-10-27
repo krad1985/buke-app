@@ -17,9 +17,11 @@ export default function AdminLogin({ onSignedIn }: { onSignedIn: (p: AdminProfil
       onSignedIn(profile);
     } catch (err) {
       const msg = (err as Error).message;
-      setError(msg.includes('permission') || msg.includes('insufficient')
-        ? '無法連線到管理員資料，請確認 Firestore 規則已發布。'
-        : msg);
+      setError(
+        msg.includes('permission') || msg.includes('insufficient')
+          ? '無法連線到管理員資料。'
+          : msg
+      );
     } finally {
       setBusy(false);
     }
@@ -27,10 +29,7 @@ export default function AdminLogin({ onSignedIn }: { onSignedIn: (p: AdminProfil
 
   return (
     <div className="panel login-panel">
-      <h1>管理後台登入</h1>
-      <p className="hint">
-        第一次使用：帳號 <code>admin</code>、密碼 <code>admin</code>，登入後請到「我的密碼」修改。
-      </p>
+      <h1>管理後台</h1>
 
       <form onSubmit={submit} className="login-form">
         <label className="field">

@@ -120,7 +120,7 @@ export default function SegmentCard({
           </label>
         )}
         <label className="field inline">
-          <span>可作答次數</span>
+          <span>可作答次數（0 = 不限）</span>
           <input
             className="input narrow"
             type="number"
@@ -128,7 +128,6 @@ export default function SegmentCard({
             value={segment.maxAttempts}
             onChange={(e) => patch({ maxAttempts: Math.max(0, Number(e.target.value) || 0) })}
           />
-          <span className="hint">0 = 不限</span>
         </label>
         <label className="field inline">
           <span>答錯後</span>

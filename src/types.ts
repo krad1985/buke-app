@@ -45,8 +45,6 @@ export interface Course {
   sortOrder: number;
   /** 是否允許重看已通過的段落 */
   allowRewatch: boolean;
-  /** 示範資料標記，串接 Firebase 後可移除 */
-  isMock?: boolean;
   segments: Segment[];
 }
 
@@ -94,6 +92,4 @@ export interface CourseProgress {
   updatedAt: number;
   /** 累計已補課時數（秒）：通過的段落長度加總 */
   watchedSec?: number;
-  /** 預留：之後匯入名單時用來把匿名進度認領成具名紀錄 */
-  bindCode?: string;
 }
