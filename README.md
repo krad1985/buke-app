@@ -7,6 +7,33 @@
 - 資料庫：Firebase Firestore + Firebase Auth
 - 部署：GitHub Pages（`npm run deploy`）
 
+## 部署到 GitHub Pages
+
+```bash
+npm run build     # 產出 dist/
+npm run deploy    # 把 dist 推到 gh-pages 分支
+```
+
+第一次部署：
+
+1. `git remote add origin https://github.com/<帳號>/<repo>.git`
+2. `git push -u origin master`
+3. `npm run deploy`
+4. repo → Settings → Pages → Source 選 `gh-pages` 分支
+5. 網址：`https://<帳號>.github.io/<repo>/`
+6. 把這個網域加進 Firebase → Authentication → Settings → 已授權網域
+
+之後每次改版只要 `npm run deploy`。因為用 hash 路由（`/#/c/...`），重整頁面不會 404，不需要 404.html 轉址。
+
+## 補課時數
+
+時數 = **已通過段落的影片長度加總**，不是實際播放秒數（重看、暫停不會重複累計）。
+
+- 學員端：課程卡片與課程頁標題下方會顯示「已補 X 小時 Y 分」，完課畫面顯示累計時數。
+- 報表：補課總表多一欄「已補時數(分)」。
+- 舊資料沒有 `watchedSec` 時，會用 `passed` 對照目前段落長度即時換算。
+- 注意：段落時間碼日後若調整，已記錄的時數不會回溯改變（匯入當下的值會被保存）。
+
 ## 三種身分
 
 | 身分 | 登入方式 | 權限 |
