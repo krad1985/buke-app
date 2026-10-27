@@ -6,6 +6,7 @@ import PasswordTab from './PasswordTab';
 import RecordTab from './RecordTab';
 import StudentTab from './StudentTab';
 import { clearSession, ensureDefaultAdmin, loadSession } from '../../lib/admins';
+import { withTimeout } from '../../lib/async';
 import type { AdminProfile } from '../../types';
 
 type TabId = 'courses' | 'students' | 'records' | 'admins' | 'password';
@@ -24,8 +25,8 @@ export default function AdminApp() {
   const [tab, setTab] = useState<TabId>('courses');
 
   useEffect(() => {
-    // 第一次使用時自動建立 admin / admin
-    ensureDefaultAdmin()
+    // 第一次使用時自動建立 admin / admin；加逾時避免規則未發布時卡在載入中
+    withTimeout(ensureDefaultAdmin(), 8000)
       .catch(() => undefined)
       .finally(() => setChecking(false));
   }, []);
