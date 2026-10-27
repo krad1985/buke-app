@@ -13,7 +13,7 @@ export default function CourseList({ courses, progress, onSelect }: Props) {
       <div className="panel empty-state">
         <h1>目前沒有上架的課程</h1>
         <p className="hint" style={{ marginTop: 8 }}>
-          課程需要由管理員在後台建立並設為「上架」。若這是第一次使用，請先到後台把示範課程載入或新增一門課。
+          請由管理員在後台建立課程並上架。
         </p>
         <p style={{ marginTop: 14 }}>
           <a className="btn primary small" href="#/admin">
