@@ -29,7 +29,7 @@ export default function AdminLogin({ onSignedIn }: { onSignedIn: (p: AdminProfil
 
   return (
     <div className="panel login-panel">
-      <h1>管理後台</h1>
+      <h1>登入</h1>
 
       <form onSubmit={submit} className="login-form">
         <label className="field">
