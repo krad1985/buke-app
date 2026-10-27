@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
-import { createAdmin, listAdmins, removeAdmin, resetAdminPassword, setAdminEnabled } from '../../lib/adminAuth';
+import {
+  createAdmin,
+  listAdmins,
+  removeAdmin,
+  resetAdminPassword,
+  setAdminEnabled,
+} from '../../lib/admins';
 import { REGIONS } from '../../lib/regions';
 import type { AdminProfile, AdminRole } from '../../types';
 
@@ -17,10 +23,10 @@ export default function AdminTab({ profile }: Props) {
   const [name, setName] = useState('');
   const [role, setRole] = useState<AdminRole>('region');
   const [region, setRegion] = useState('');
-  const [password, setPassword] = useState('');
+  const [pass, setPass] = useState('');
 
   const [resetting, setResetting] = useState<string | null>(null);
-  const [newPassword, setNewPassword] = useState('');
+  const [newPass, setNewPass] = useState('');
 
   const reload = useCallback(() => {
     listAdmins()
@@ -41,12 +47,12 @@ export default function AdminTab({ profile }: Props) {
     setError(null);
     setOk(null);
     try {
-      await createAdmin({ account, name, role, region, password });
-      setOk(`已建立管理員「${account}」，請把帳號與密碼交給對方。`);
+      await createAdmin({ account, name, role, region, pass });
+      setOk(`已建立「${account}」，帳號密碼請交給對方。`);
       setAccount('');
       setName('');
       setRegion('');
-      setPassword('');
+      setPass('');
       reload();
     } catch (err) {
       setError((err as Error).message);
@@ -59,10 +65,10 @@ export default function AdminTab({ profile }: Props) {
     setError(null);
     setOk(null);
     try {
-      await resetAdminPassword(target, newPassword);
-      setOk(`已重設「${target.account}」的密碼。`);
+      await resetAdminPassword(target.account, newPass);
+      setOk(`已把「${target.account}」的密碼改為新密碼。`);
       setResetting(null);
-      setNewPassword('');
+      setNewPass('');
       reload();
     } catch (err) {
       setError((err as Error).message);
@@ -75,7 +81,7 @@ export default function AdminTab({ profile }: Props) {
         <div>
           <h2>管理員</h2>
           <p className="hint">
-            課程管理員可維護課程與管理員；區域管理員只能匯入自己區域的名單、匯出自己區域的補課記錄。
+            課程管理員可維護課程與管理員；區域管理員只能匯入自己區域的名單、匯出自己區域的記錄。
           </p>
         </div>
       </div>
@@ -96,17 +102,19 @@ export default function AdminTab({ profile }: Props) {
                   <th>姓名</th>
                   <th>角色</th>
                   <th>區域</th>
+                  <th>密碼</th>
                   <th>狀態</th>
                   <th />
                 </tr>
               </thead>
               <tbody>
                 {admins.map((a) => (
-                  <tr key={a.uid}>
+                  <tr key={a.account}>
                     <td className="mono">{a.account}</td>
                     <td>{a.name}</td>
                     <td>{a.role === 'course' ? '課程管理員' : '區域管理員'}</td>
                     <td>{a.region || '—'}</td>
+                    <td className="mono">{a.pass}</td>
                     <td>
                       <span className={`state-dot ${a.enabled === false ? 'idle' : 'done'}`}>
                         {a.enabled === false ? '已停用' : '啟用中'}
@@ -118,7 +126,7 @@ export default function AdminTab({ profile }: Props) {
                           <button
                             className="btn tiny"
                             onClick={() =>
-                              setAdminEnabled(a.uid, a.enabled === false)
+                              setAdminEnabled(a.account, a.enabled === false)
                                 .then(reload)
                                 .catch((e: unknown) => setError((e as Error).message))
                             }
@@ -128,17 +136,17 @@ export default function AdminTab({ profile }: Props) {
                           <button
                             className="btn tiny"
                             onClick={() => {
-                              setResetting(a.uid);
-                              setNewPassword('');
+                              setResetting(a.account);
+                              setNewPass('');
                             }}
                           >
-                            重設密碼
+                            改密碼
                           </button>
                           <button
                             className="btn tiny ghost danger"
                             onClick={() => {
-                              if (!window.confirm(`移除管理員「${a.account}」？對方將立即失去後台權限。`)) return;
-                              removeAdmin(a)
+                              if (!window.confirm(`移除管理員「${a.account}」？`)) return;
+                              removeAdmin(a.account)
                                 .then(reload)
                                 .catch((e: unknown) => setError((e as Error).message));
                             }}
@@ -147,6 +155,7 @@ export default function AdminTab({ profile }: Props) {
                           </button>
                         </>
                       )}
+                      {a.account === profile.account && <span className="hint">目前登入中</span>}
                     </td>
                   </tr>
                 ))}
@@ -157,22 +166,16 @@ export default function AdminTab({ profile }: Props) {
 
         {resetting && (
           <div className="inline-form">
-            <span className="hint">設定新密碼（至少 6 個字元）</span>
-            <input
-              className="input"
-              type="text"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              placeholder="新密碼"
-            />
+            <span className="hint">新密碼</span>
+            <input className="input" value={newPass} onChange={(e) => setNewPass(e.target.value)} />
             <button
               className="btn primary small"
               onClick={() => {
-                const target = admins?.find((a) => a.uid === resetting);
+                const target = admins?.find((a) => a.account === resetting);
                 if (target) void handleReset(target);
               }}
             >
-              確認重設
+              確認
             </button>
             <button className="btn small ghost" onClick={() => setResetting(null)}>
               取消
@@ -196,7 +199,7 @@ export default function AdminTab({ profile }: Props) {
           </label>
           <label className="field">
             <span>姓名</span>
-            <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="例：王小明" />
+            <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
           </label>
           <label className="field">
             <span>角色</span>
@@ -222,14 +225,8 @@ export default function AdminTab({ profile }: Props) {
             </select>
           </label>
           <label className="field">
-            <span>初始密碼</span>
-            <input
-              className="input"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="至少 6 個字元"
-              required
-            />
+            <span>登入密碼</span>
+            <input className="input" value={pass} onChange={(e) => setPass(e.target.value)} required />
           </label>
           <div className="field" style={{ justifyContent: 'flex-end' }}>
             <button className="btn primary" type="submit" disabled={busy}>
@@ -238,7 +235,7 @@ export default function AdminTab({ profile }: Props) {
           </div>
         </form>
         <p className="hint">
-          建立的帳號會立刻生效。帳號與區域一旦建立就不要隨意變更，避免與既有名單路徑不一致。
+          密碼以明文儲存，這裡看得到也改得動；忘記密碼由課程管理員直接改一組新的即可。
         </p>
       </div>
     </div>

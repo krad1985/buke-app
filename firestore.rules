@@ -1,85 +1,52 @@
 rules_version = '2';
 
-// 部署：Firebase Console → Firestore Database → 規則 → 貼上 → 發布
+// ============================================================
+// 防君子模式（內部使用，方便優先）
 //
-// 三種身分
-// 1. 根管理員：固定帳號 admin（Auth 信箱 admin@buke.local），角色視為課程管理員
-// 2. 課程管理員：admins/{uid}.role == 'course'
-// 3. 區域管理員：admins/{uid}.role == 'region'，只能碰自己 region 路徑下的資料
-// 4. 學員：匿名登入，只能依「區域＋電話」取得自己的資料
+// 本系統沒有使用 Firebase Auth。管理權限只在前端畫面用密碼區分，
+// 因此「寫入」對所有能開網站的人都是開放的：知道網址的人可以用
+// 開發者工具直接改資料。這個規則檔只保留兩件還做得到的事：
+//   1. 學員名單可用單筆讀取（知道電話才查得到），但不能整批列舉
+//      （避免有人一次抓走全區名單的個資）
+//   2. 其他資料一律可讀可寫
+//
+// 若日後要「真的」防止有心人，唯一辦法是把管理員寫入改由伺服器
+// （例如 Vercel 或 Cloud Functions）以 Firebase Admin SDK 執行。
+// ============================================================
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    function root() {
-      return request.auth != null && request.auth.token.email == 'admin@buke.local';
-    }
-    function myAdmin() {
-      return get(/databases/$(database)/documents/admins/$(request.auth.uid)).data;
-    }
-    function hasAdminDoc() {
-      return request.auth != null
-        && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
-    }
-    function isCourseAdmin() {
-      return root() || (hasAdminDoc() && myAdmin().role == 'course' && myAdmin().enabled == true);
-    }
-    function isRegionAdmin(region) {
-      return hasAdminDoc()
-        && myAdmin().role == 'region'
-        && myAdmin().enabled == true
-        && myAdmin().region == region;
-    }
-
-    // 課程：所有人可讀（學員端不需要登入也能載入），只有課程管理員能改
     match /courses/{courseId} {
-      allow read: if true;
-      allow write: if isCourseAdmin();
+      allow read, write: if true;
     }
 
-    // 管理員名單
-    match /admins/{uid} {
-      allow get: if request.auth != null && (request.auth.uid == uid || isCourseAdmin());
-      allow list: if isCourseAdmin();
-      allow create, update, delete: if isCourseAdmin();
+    // 管理員帳號與密碼（明文）。前端登入時比對。
+    match /admins/{account} {
+      allow read, write: if true;
     }
 
-    // 帳號對照表（只有帳號與登入信箱，沒有密碼）
-    match /accounts/{account} {
-      allow get: if true;
-      allow list: if isCourseAdmin();
-      allow write: if isCourseAdmin();
-    }
-
-    // 學員登入索引：知道電話才查得到，不能整批列舉
+    // 電話 → 區域索引：只能單筆取，不能列舉
     match /phones/{phone} {
       allow get: if true;
       allow list: if false;
-      allow write: if isCourseAdmin()
-        || isRegionAdmin(request.resource.data.region);
-    }
-
-    match /regions/{region} {
-      allow get: if true;
-      allow list: if isCourseAdmin();
-      allow write: if isCourseAdmin() || isRegionAdmin(region);
-    }
-
-    // 名單：以路徑分區，區域管理員只能碰自己的區
-    match /regions/{region}/students/{phone} {
-      allow get: if true;
-      allow list: if isCourseAdmin() || isRegionAdmin(region);
-      allow create, update, delete: if isCourseAdmin() || isRegionAdmin(region);
-    }
-
-    // 進度：學員以電話識別（防君子），管理員依區域讀取
-    // 不開放 collection group 查詢，避免一次撈出全庫
-    match /regions/{region}/students/{phone}/progress/{courseId} {
-      allow read: if true;
       allow write: if true;
     }
 
+    match /regions/{region} {
+      allow read, write: if true;
+    }
+
+    // 名單需要列舉（區域管理員要看到整區），因此無法擋整批下載
+    match /regions/{region}/students/{phone} {
+      allow read, write: if true;
+    }
+
+    match /regions/{region}/students/{phone}/progress/{courseId} {
+      allow read, write: if true;
+    }
+
     match /{document=**} {
-      allow read, write: if false;
+      allow read, write: if true;
     }
   }
 }

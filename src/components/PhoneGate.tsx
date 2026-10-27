@@ -66,7 +66,7 @@ export default function PhoneGate({ onBound, onSkip }: Props) {
         </p>
       </div>
       <p className="hint gate-note">
-        提醒：這是防君子的設計。知道他人電話號碼的人可以看到該筆進度，但名單無法整批下載。
+        提醒：這是防君子設計，以電話號碼辨識身分，不驗證本人。
       </p>
     </div>
   );

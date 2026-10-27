@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import CourseEditor from './CourseEditor';
 import { withTimeout } from '../../lib/async';
+import { downloadText } from '../../lib/csv';
 import { deleteCourse, emptyCourse, listAllCourses, newCourseId, saveCourse } from '../../lib/coursesRepo';
 import type { Course } from '../../types';
 
@@ -55,6 +56,33 @@ export default function CourseTab() {
     }
   };
 
+  const handleExport = () => {
+    if (!courses) return;
+    downloadText(
+      `課程備份_${new Date().toISOString().slice(0, 10)}.json`,
+      JSON.stringify(courses, null, 2)
+    );
+  };
+
+  const handleImport = async (file: File | undefined) => {
+    if (!file) return;
+    try {
+      const parsed = JSON.parse(await file.text()) as Course[];
+      if (!Array.isArray(parsed) || parsed.length === 0) throw new Error('檔案內容不是課程陣列');
+      if (!window.confirm(`匯入 ${parsed.length} 門課程？（同 ID 會被覆蓋）`)) return;
+      setBusy(true);
+      for (const c of parsed) {
+        if (!c || typeof c.courseId !== 'string') throw new Error('有課程缺少 courseId');
+        await saveCourse(c);
+      }
+      reload();
+    } catch (e) {
+      setError('匯入失敗：' + (e instanceof Error ? e.message : String(e)));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   if (editing) {
     return (
       <CourseEditor
@@ -77,6 +105,18 @@ export default function CourseTab() {
           <p className="hint">學員端只看得到「已上架」的課程。</p>
         </div>
         <div className="row-gap">
+          <button className="btn small" onClick={handleExport} disabled={busy || !courses?.length}>
+            匯出備份
+          </button>
+          <label className="btn small">
+            匯入備份
+            <input
+              type="file"
+              accept="application/json,.json"
+              hidden
+              onChange={(e) => void handleImport(e.target.files?.[0])}
+            />
+          </label>
           <button className="btn" onClick={handleSeed} disabled={busy}>
             載入示範課程
           </button>

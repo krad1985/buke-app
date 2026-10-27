@@ -1,10 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { onAuthStateChanged, signInAnonymously } from 'firebase/auth';
 import AdminApp from './components/admin/AdminApp';
 import CourseList from './components/CourseList';
 import LessonView from './components/LessonView';
 import PhoneGate from './components/PhoneGate';
-import { auth } from './lib/firebase';
 import { withTimeout } from './lib/async';
 import { listAllCourses } from './lib/coursesRepo';
 import { emptyProgress, loadAllLocal, saveLocal } from './lib/progress';
@@ -46,13 +44,7 @@ export default function App() {
     return () => window.removeEventListener('hashchange', onHash);
   }, []);
 
-  /* 一律匿名登入（管理員另行登入，會取代這個 session） */
-  useEffect(() => {
-    return onAuthStateChanged(auth, (user) => {
-      if (!user) signInAnonymously(auth).catch(() => undefined);
-    });
-  }, []);
-
+  /* 不使用 Firebase Auth：學員以電話識別，管理員以密碼識別 */
   const reloadCourses = useCallback(() => {
     setLoadError(null);
     withTimeout(listAllCourses())

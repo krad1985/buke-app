@@ -71,15 +71,15 @@ export interface Student {
 
 export type AdminRole = 'course' | 'region';
 
-/** 管理員（doc ID = Firebase Auth uid） */
+/** 管理員（doc ID = 帳號） */
 export interface AdminProfile {
-  uid: string;
   account: string;
   name: string;
   role: AdminRole;
   region: string;
   enabled: boolean;
-  authEmail: string;
+  /** 明文密碼：防君子模式，前端比對用 */
+  pass: string;
 }
 
 export interface CourseProgress {
