@@ -2,99 +2,150 @@ import { collection, deleteDoc, doc, getDoc, getDocs, setDoc, writeBatch } from 
 import { db } from './firebase';
 import type { Student } from '../types';
 
-/* ---------------- 電話號碼 ---------------- */
+/* ---------------- 學員代碼 ---------------- */
 
-/** 只留數字；886 開頭轉回 0 開頭 */
-export function normalizePhone(input: string): string {
-  let d = (input ?? '').replace(/[^\d]/g, '');
-  if (d.startsWith('886')) d = '0' + d.slice(3);
-  return d;
+export function normalizeCode(input: string): string {
+  return (input ?? '').trim().toUpperCase().replace(/\s/g, '');
 }
 
-export function isValidPhone(key: string): boolean {
-  return /^0\d{8,9}$/.test(key);
-}
-
-export function maskPhone(key: string): string {
-  if (key.length < 6) return key;
-  return `${key.slice(0, 4)}***${key.slice(-3)}`;
+export function isValidCode(code: string): boolean {
+  return /^[A-Z0-9]{4,20}$/.test(code);
 }
 
 /* ---------------- 讀寫 ---------------- */
 
-const studentDoc = (region: string, phoneKey: string) =>
-  doc(db, 'regions', region, 'students', phoneKey);
+const studentDoc = (region: string, studentId: string) =>
+  doc(db, 'regions', region, 'students', studentId);
 
-/** 學員以電話登入：先查索引取得區域，再取學員資料 */
-export async function findStudentByPhone(phoneKey: string): Promise<Student | null> {
-  const idx = await getDoc(doc(db, 'phones', phoneKey));
+/** 學員以代碼登入：先查索引取得區域，再取學員資料 */
+export async function findStudentByCode(code: string): Promise<Student | null> {
+  const key = normalizeCode(code);
+  if (!isValidCode(key)) return null;
+  const idx = await getDoc(doc(db, 'ids', key));
   if (!idx.exists()) return null;
   const region = (idx.data() as { region?: string }).region ?? '';
   if (!region) return null;
-  const snap = await getDoc(studentDoc(region, phoneKey));
+  const snap = await getDoc(studentDoc(region, key));
   if (!snap.exists()) return null;
-  return { ...(snap.data() as Student), phoneKey, region };
+  return { ...(snap.data() as Student), studentId: key, region };
 }
 
 export async function listStudentsInRegion(region: string): Promise<Student[]> {
   const snap = await getDocs(collection(db, 'regions', region, 'students'));
   return snap.docs
-    .map((d) => ({ ...(d.data() as Student), phoneKey: d.id, region }))
-    .sort((a, b) => a.phoneKey.localeCompare(b.phoneKey));
+    .map((d) => ({ ...(d.data() as Student), studentId: d.id, region }))
+    .sort((a, b) => a.studentId.localeCompare(b.studentId));
 }
 
 export async function saveStudent(student: Student): Promise<void> {
-  await setDoc(studentDoc(student.region, student.phoneKey), {
+  await setDoc(studentDoc(student.region, student.studentId), {
     ...student,
     updatedAt: Date.now(),
   });
-  await setDoc(doc(db, 'phones', student.phoneKey), {
+  await setDoc(doc(db, 'ids', student.studentId), {
     region: student.region,
     name: student.name,
   });
 }
 
-export async function deleteStudent(region: string, phoneKey: string): Promise<void> {
-  const progressSnap = await getDocs(collection(db, 'regions', region, 'students', phoneKey, 'progress'));
+export async function deleteStudent(region: string, studentId: string): Promise<void> {
+  const progressSnap = await getDocs(
+    collection(db, 'regions', region, 'students', studentId, 'progress')
+  );
   if (!progressSnap.empty) {
     const batch = writeBatch(db);
     progressSnap.docs.forEach((d) => batch.delete(d.ref));
     await batch.commit();
   }
-  await deleteDoc(studentDoc(region, phoneKey));
-  await deleteDoc(doc(db, 'phones', phoneKey)).catch(() => undefined);
+  await deleteDoc(studentDoc(region, studentId));
+  await deleteDoc(doc(db, 'ids', studentId)).catch(() => undefined);
 }
 
-/* ---------------- 名單匯入 ---------------- */
+/* ---------------- 名單解析 ---------------- */
 
 export interface RosterRow {
   studentId: string;
-  region: string;
+  name: string;
   classroom: string;
   group: string;
   role: string;
-  name: string;
-  phone: string;
 }
 
-const HEADER_MAP: Record<string, keyof RosterRow> = {
+type ColumnKey = keyof RosterRow | 'groupLarge' | 'groupSmall';
+
+const HEADER_MAP: Record<string, ColumnKey> = {
+  學員代碼: 'studentId',
+  學員編號: 'studentId',
+  編號: 'studentId',
   uid: 'studentId',
   id: 'studentId',
-  編號: 'studentId',
-  學員編號: 'studentId',
-  區域: 'region',
-  教室: 'classroom',
-  組別: 'group',
-  身份: 'role',
-  身分: 'role',
+  學員姓名: 'name',
   姓名: 'name',
   名字: 'name',
-  電話: 'phone',
-  手機: 'phone',
-  手機號碼: 'phone',
+  母班行政組織: 'classroom',
+  教室: 'classroom',
+  大組: 'groupLarge',
+  小組: 'groupSmall',
+  組別: 'groupSmall',
+  身份別: 'role',
+  身份: 'role',
+  身分: 'role',
 };
 
-const DEFAULT_ORDER: (keyof RosterRow)[] = ['studentId', 'region', 'classroom', 'group', 'role', 'name', 'phone'];
+/** 從二維陣列（Excel 工作表）解析名單；自動找表頭列 */
+export function parseRosterMatrix(matrix: string[][]): { rows: RosterRow[]; errors: string[] } {
+  const errors: string[] = [];
+  const clean = matrix.map((r) => (r ?? []).map((c) => String(c ?? '').trim()));
+
+  const headerIndex = clean.findIndex((row) =>
+    row.some((cell) => cell.replace(/\s/g, '') in HEADER_MAP || cell.replace(/\s/g, '').toLowerCase() in HEADER_MAP)
+  );
+  if (headerIndex < 0) return { rows: [], errors: ['找不到表頭（需要「學員代碼」與「學員姓名」欄）'] };
+
+  const header = clean[headerIndex].map((c) => c.replace(/\s/g, ''));
+  const cols: (ColumnKey | null)[] = header.map((c) => HEADER_MAP[c] ?? HEADER_MAP[c.toLowerCase()] ?? null);
+
+  const rows: RosterRow[] = [];
+  for (let i = headerIndex + 1; i < clean.length; i += 1) {
+    const cells = clean[i];
+    if (!cells.some(Boolean)) continue;
+
+    const pick = (key: ColumnKey): string => {
+      const idx = cols.indexOf(key);
+      return idx >= 0 ? cells[idx] ?? '' : '';
+    };
+
+    const studentId = normalizeCode(pick('studentId'));
+    const name = pick('name');
+    if (!studentId && !name) continue;
+
+    if (!studentId) {
+      errors.push(`第 ${i + 1} 列「${name}」：沒有學員代碼`);
+      continue;
+    }
+    if (!isValidCode(studentId)) {
+      errors.push(`第 ${i + 1} 列：學員代碼「${pick('studentId')}」格式不對`);
+      continue;
+    }
+    if (!name) {
+      errors.push(`第 ${i + 1} 列（${studentId}）：沒有姓名`);
+      continue;
+    }
+
+    const big = pick('groupLarge');
+    const small = pick('groupSmall');
+    rows.push({
+      studentId,
+      name,
+      classroom: pick('classroom'),
+      group: big && small ? `${big}-${small}` : big || small,
+      role: pick('role'),
+    });
+  }
+
+  if (rows.length === 0 && errors.length === 0) errors.push('沒有可匯入的資料列');
+  return { rows, errors };
+}
 
 function splitLine(line: string, delim: string): string[] {
   if (delim !== ',') return line.split(delim).map((c) => c.trim());
@@ -107,111 +158,70 @@ function splitLine(line: string, delim: string): string[] {
       if (quoted && line[i + 1] === '"') {
         cur += '"';
         i += 1;
-      } else {
-        quoted = !quoted;
-      }
+      } else quoted = !quoted;
     } else if (ch === ',' && !quoted) {
       out.push(cur.trim());
       cur = '';
-    } else {
-      cur += ch;
-    }
+    } else cur += ch;
   }
   out.push(cur.trim());
   return out;
 }
 
-/** 支援 Excel 貼上（Tab）與 CSV；有表頭會自動對欄位，否則照 uid、區域、教室、組別、身份、姓名、電話 */
+/** 貼上的文字（Tab 或逗號分隔） */
 export function parseRosterText(text: string): { rows: RosterRow[]; errors: string[] } {
-  const lines = text
-    .split(/\r?\n/)
-    .map((l) => l.trim())
-    .filter(Boolean);
-  const errors: string[] = [];
-  if (lines.length === 0) return { rows: [], errors: ['沒有讀到任何資料'] };
-
+  const lines = text.split(/\r?\n/).filter((l) => l.trim());
+  if (lines.length === 0) return { rows: [], errors: ['沒有資料'] };
   const delim = lines[0].includes('\t') ? '\t' : ',';
-  const first = splitLine(lines[0], delim).map((c) => c.replace(/\s/g, '').toLowerCase());
-  const hasHeader = first.some((c) => c in HEADER_MAP);
+  return parseRosterMatrix(lines.map((l) => splitLine(l, delim)));
+}
 
-  let columns: (keyof RosterRow | null)[] = DEFAULT_ORDER.slice();
-  let start = 0;
-  if (hasHeader) {
-    columns = first.map((c) => HEADER_MAP[c] ?? null);
-    start = 1;
+/** 讀取上傳的檔案（.xlsx / .xls / .csv） */
+export async function parseRosterFile(file: File): Promise<{ rows: RosterRow[]; errors: string[] }> {
+  if (/\.(csv|txt)$/i.test(file.name)) {
+    return parseRosterText(await file.text());
   }
-
-  const rows: RosterRow[] = [];
-  for (let i = start; i < lines.length; i += 1) {
-    const cells = splitLine(lines[i], delim);
-    const row: RosterRow = { studentId: '', region: '', classroom: '', group: '', role: '', name: '', phone: '' };
-    columns.forEach((key, idx) => {
-      if (key) row[key] = (cells[idx] ?? '').trim();
-    });
-
-    if (!row.phone && !row.name) continue;
-    if (!row.name) {
-      errors.push(`第 ${i + 1} 列：沒有姓名`);
-      continue;
-    }
-    if (!isValidPhone(normalizePhone(row.phone))) {
-      errors.push(`第 ${i + 1} 列「${row.name}」：電話「${row.phone}」格式不對`);
-      continue;
-    }
-    rows.push(row);
-  }
-
-  if (rows.length === 0 && errors.length === 0) errors.push('沒有可匯入的資料列');
-  return { rows, errors };
+  const XLSX = await import('xlsx');
+  const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  if (!ws) return { rows: [], errors: ['檔案裡沒有工作表'] };
+  const matrix = XLSX.utils.sheet_to_json<string[]>(ws, { header: 1, raw: false, defval: '' });
+  return parseRosterMatrix(matrix as string[][]);
 }
 
 export interface ImportResult {
   created: number;
   duplicates: string[];
-  regionMismatch: string[];
 }
 
-/**
- * 匯入名單。region 由呼叫端決定（區域管理員固定為自己的區域，課程管理員可指定）。
- * 檔案裡的「區域」欄若與指定區域不符，會回報但不阻擋。
- */
 export async function importRoster(region: string, rows: RosterRow[]): Promise<ImportResult> {
-  const byPhone = new Map<string, RosterRow>();
+  const byId = new Map<string, RosterRow>();
   const duplicates: string[] = [];
-  const regionMismatch: string[] = [];
-
   for (const row of rows) {
-    const key = normalizePhone(row.phone);
-    if (row.region && row.region.trim() !== region) {
-      regionMismatch.push(`${row.name}（檔案寫 ${row.region}）`);
-    }
-    if (byPhone.has(key)) duplicates.push(`${row.name}（${key}）`);
-    byPhone.set(key, row);
+    if (byId.has(row.studentId)) duplicates.push(`${row.name}（${row.studentId}）`);
+    byId.set(row.studentId, row);
   }
 
-  const entries = [...byPhone.entries()];
+  const entries = [...byId.entries()];
   let created = 0;
   for (let i = 0; i < entries.length; i += 200) {
     const batch = writeBatch(db);
-    for (const [phoneKey, row] of entries.slice(i, i + 200)) {
-      batch.set(studentDoc(region, phoneKey), {
-        studentId: row.studentId,
+    for (const [studentId, row] of entries.slice(i, i + 200)) {
+      batch.set(studentDoc(region, studentId), {
+        studentId,
         name: row.name,
-        phone: row.phone,
-        phoneKey,
         region,
         classroom: row.classroom,
         group: row.group,
         role: row.role,
         updatedAt: Date.now(),
       });
-      batch.set(doc(db, 'phones', phoneKey), { region, name: row.name }, { merge: true });
+      batch.set(doc(db, 'ids', studentId), { region, name: row.name }, { merge: true });
       created += 1;
     }
     await batch.commit();
   }
 
   await setDoc(doc(db, 'regions', region), { name: region, updatedAt: Date.now() }, { merge: true });
-
-  return { created, duplicates, regionMismatch };
+  return { created, duplicates };
 }

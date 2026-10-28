@@ -1,51 +1,22 @@
 rules_version = '2';
 
 // ============================================================
-// 防君子模式（內部使用，方便優先）
+// 防君子模式：所有資料可讀可寫。
 //
-// 本系統沒有使用 Firebase Auth。管理權限只在前端畫面用密碼區分，
-// 因此「寫入」對所有能開網站的人都是開放的：知道網址的人可以用
-// 開發者工具直接改資料。這個規則檔只保留兩件還做得到的事：
-//   1. 學員名單可用單筆讀取（知道電話才查得到），但不能整批列舉
-//      （避免有人一次抓走全區名單的個資）
-//   2. 其他資料一律可讀可寫
+// 原因：本系統沒有伺服器、也沒有 Firebase Auth。管理權限只在
+// 前端用密碼區分，所以資料庫無法分辨「誰是管理員」。與其寫一套
+// 看起來嚴格但實際擋不住的規則，這裡直接開放，並在其他地方補強：
+//   - 課程有「匯出備份／匯入備份」
+//   - 管理員名單看得到帳號，忘記密碼由課程管理員改
 //
-// 若日後要「真的」防止有心人，唯一辦法是把管理員寫入改由伺服器
-// （例如 Vercel 或 Cloud Functions）以 Firebase Admin SDK 執行。
+// 若日後要真正防護，唯一辦法是把寫入改由伺服器（Vercel Function
+// 或 Cloud Functions）以 Admin SDK 執行，屆時把這裡改成
+// allow write: if false;
 // ============================================================
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    match /courses/{courseId} {
+    match /{document=**} {
       allow read, write: if true;
     }
-
-    // 管理員帳號與密碼（明文）。前端登入時比對。
-    match /admins/{account} {
-      allow read, write: if true;
-    }
-
-    // 電話 → 區域索引：只能單筆取，不能列舉
-    match /phones/{phone} {
-      allow get: if true;
-      allow list: if false;
-      allow write: if true;
-    }
-
-    match /regions/{region} {
-      allow read, write: if true;
-    }
-
-    // 名單需要列舉（區域管理員要看到整區），因此無法擋整批下載
-    match /regions/{region}/students/{phone} {
-      allow read, write: if true;
-    }
-
-    match /regions/{region}/students/{phone}/progress/{courseId} {
-      allow read, write: if true;
-    }
-
-    // 注意：不要加 match /{document=**} 的萬用允許，否則上面 phones 的「不可列舉」會被蓋掉
-    // （Firestore 只要任一規則允許就放行）。
   }
 }

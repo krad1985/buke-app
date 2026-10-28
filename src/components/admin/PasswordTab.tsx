@@ -1,15 +1,9 @@
 import { useState } from 'react';
-import { changeMyPassword } from '../../lib/admins';
-import type { AdminProfile } from '../../types';
+import { changeAdminPass } from '../../lib/adminAuth';
 
-interface Props {
-  profile: AdminProfile;
-  onChanged: (p: AdminProfile) => void;
-}
-
-export default function PasswordTab({ profile, onChanged }: Props) {
-  const [oldPassword, setOldPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
+export default function PasswordTab() {
+  const [oldPass, setOldPass] = useState('');
+  const [newPass, setNewPass] = useState('');
   const [confirm, setConfirm] = useState('');
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -19,17 +13,16 @@ export default function PasswordTab({ profile, onChanged }: Props) {
     e.preventDefault();
     setError(null);
     setMessage(null);
-    if (newPassword !== confirm) {
+    if (newPass !== confirm) {
       setError('兩次輸入的新密碼不一致。');
       return;
     }
     setBusy(true);
     try {
-      const updated = await changeMyPassword(profile.account, oldPassword, newPassword);
-      onChanged(updated);
-      setMessage('密碼已更新，下次請用新密碼登入。');
-      setOldPassword('');
-      setNewPassword('');
+      await changeAdminPass(oldPass, newPass);
+      setMessage('密碼已更新。');
+      setOldPass('');
+      setNewPass('');
       setConfirm('');
     } catch (err) {
       setError((err as Error).message);
@@ -41,12 +34,7 @@ export default function PasswordTab({ profile, onChanged }: Props) {
   return (
     <div className="admin-home">
       <div className="admin-toolbar">
-        <div>
-          <h2>我的密碼</h2>
-          <p className="hint">
-            目前登入：{profile.account}（{profile.name}）
-          </p>
-        </div>
+        <h2>管理密碼</h2>
       </div>
 
       <div className="panel" style={{ maxWidth: 420 }}>
@@ -56,8 +44,8 @@ export default function PasswordTab({ profile, onChanged }: Props) {
             <input
               className="input"
               type="password"
-              value={oldPassword}
-              onChange={(e) => setOldPassword(e.target.value)}
+              value={oldPass}
+              onChange={(e) => setOldPass(e.target.value)}
               required
             />
           </label>
@@ -65,8 +53,8 @@ export default function PasswordTab({ profile, onChanged }: Props) {
             <span>新密碼</span>
             <input
               className="input"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
+              value={newPass}
+              onChange={(e) => setNewPass(e.target.value)}
               required
             />
           </label>

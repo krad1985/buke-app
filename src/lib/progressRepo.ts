@@ -4,17 +4,17 @@ import { saveLocal } from './progress';
 import type { Course, CourseProgress, Student } from '../types';
 
 /**
- * 進度路徑：regions/{區域}/students/{電話}/progress/{courseId}
- * 以電話為識別，換手機、換瀏覽器都還在。（防君子）
+ * 進度路徑：regions/{區域}/students/{學員代碼}/progress/{courseId}
+ * 以學員代碼為識別，換裝置也還在。（防君子）
  */
-const progressCol = (region: string, phoneKey: string) =>
-  collection(db, 'regions', region, 'students', phoneKey, 'progress');
+const progressCol = (region: string, studentId: string) =>
+  collection(db, 'regions', region, 'students', studentId, 'progress');
 
 export async function loadAllProgress(
   region: string,
-  phoneKey: string
+  studentId: string
 ): Promise<Record<string, CourseProgress>> {
-  const snap = await getDocs(progressCol(region, phoneKey));
+  const snap = await getDocs(progressCol(region, studentId));
   const out: Record<string, CourseProgress> = {};
   snap.docs.forEach((d) => {
     out[d.id] = { ...(d.data() as CourseProgress), courseId: d.id };
@@ -25,11 +25,11 @@ export async function loadAllProgress(
 
 export async function saveProgressFor(
   region: string,
-  phoneKey: string,
+  studentId: string,
   progress: CourseProgress
 ): Promise<void> {
   saveLocal(progress);
-  await setDoc(doc(progressCol(region, phoneKey), progress.courseId), progress);
+  await setDoc(doc(progressCol(region, studentId), progress.courseId), progress);
 }
 
 export interface StudentRecord {
@@ -46,7 +46,7 @@ export async function loadRegionRecords(region: string, students: Student[]): Pr
     const results = await Promise.all(
       slice.map(async (student) => {
         try {
-          const snap = await getDocs(progressCol(region, student.phoneKey));
+          const snap = await getDocs(progressCol(region, student.studentId));
           const progress: Record<string, CourseProgress> = {};
           snap.docs.forEach((d) => {
             progress[d.id] = { ...(d.data() as CourseProgress), courseId: d.id };

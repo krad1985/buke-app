@@ -54,30 +54,19 @@ export interface AnswerRecord {
   correct: boolean;
 }
 
-/** 學員名單（以手機號碼為識別，doc ID = 正規化後的號碼） */
+/** 學員名單（doc ID = 學員代碼） */
 export interface Student {
+  /** 學員代碼，例如 TW00103698；同時是資料庫文件 ID */
   studentId: string;
   name: string;
-  phone: string;
-  phoneKey: string;
-  region: string;
+  /** 母班行政組織 */
   classroom: string;
+  /** 大組-小組 */
   group: string;
+  /** 身份別：學員／輔導員… */
   role: string;
-  updatedAt: number;
-}
-
-export type AdminRole = 'course' | 'region';
-
-/** 管理員（doc ID = 帳號） */
-export interface AdminProfile {
-  account: string;
-  name: string;
-  role: AdminRole;
   region: string;
-  enabled: boolean;
-  /** 明文密碼：防君子模式，前端比對用 */
-  pass: string;
+  updatedAt: number;
 }
 
 export interface CourseProgress {

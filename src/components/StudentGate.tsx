@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { findStudentByPhone, isValidPhone, normalizePhone } from '../lib/roster';
+import { findStudentByCode, isValidCode, normalizeCode } from '../lib/roster';
 import type { Student } from '../types';
 
 interface Props {
@@ -7,24 +7,24 @@ interface Props {
   onSkip: () => void;
 }
 
-export default function PhoneGate({ onBound, onSkip }: Props) {
-  const [phone, setPhone] = useState('');
+export default function StudentGate({ onBound, onSkip }: Props) {
+  const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const key = normalizePhone(phone);
-    if (!isValidPhone(key)) {
-      setError('請輸入完整的手機號碼。');
+    const key = normalizeCode(code);
+    if (!isValidCode(key)) {
+      setError('請輸入學員代碼，例如 TW00103698。');
       return;
     }
     setBusy(true);
     setError(null);
     try {
-      const student = await findStudentByPhone(key);
+      const student = await findStudentByCode(key);
       if (!student) {
-        setError('查不到這個號碼，請確認或聯絡窗口更新名單。');
+        setError('查不到這個代碼，請確認或聯絡窗口更新名單。');
         return;
       }
       onBound(student);
@@ -38,17 +38,16 @@ export default function PhoneGate({ onBound, onSkip }: Props) {
   return (
     <div className="gate">
       <div className="panel gate-card">
-        <h1>請輸入手機號碼</h1>
+        <h1>請輸入學員代碼</h1>
         <form onSubmit={submit} className="login-form">
           <label className="field">
-            <span>手機號碼</span>
+            <span>學員代碼</span>
             <input
               className="input mono"
-              inputMode="tel"
-              autoComplete="tel"
-              placeholder="0912345678"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
+              autoComplete="off"
+              placeholder="TW00103698"
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
             />
           </label>
           {error && <p className="form-error">{error}</p>}

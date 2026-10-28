@@ -6,11 +6,7 @@ import { listStudentsInRegion } from '../../lib/roster';
 import { loadRegionRecords, type StudentRecord } from '../../lib/progressRepo';
 import { getPrefRegion, setPrefRegion } from '../../lib/adminPrefs';
 import { REGIONS } from '../../lib/regions';
-import type { AdminProfile, Course } from '../../types';
-
-interface Props {
-  profile: AdminProfile;
-}
+import type { Course } from '../../types';
 
 const fmtDate = (ts?: number) => (ts ? new Date(ts).toLocaleString('zh-TW', { hour12: false }) : '');
 
@@ -20,16 +16,14 @@ interface Row {
   group: string;
   role: string;
   name: string;
-  phone: string;
   cells: Record<string, string>;
   doneCount: number;
   minutes: number;
   lastUpdated: number;
 }
 
-export default function RecordTab({ profile }: Props) {
-  const fixedRegion = profile.role === 'region' ? profile.region : '';
-  const [region, setRegion] = useState(fixedRegion || getPrefRegion());
+export default function RecordTab() {
+  const [region, setRegion] = useState(getPrefRegion());
   const [courses, setCourses] = useState<Course[]>([]);
   const [records, setRecords] = useState<StudentRecord[] | null>(null);
   const [onlyRecorded, setOnlyRecorded] = useState(false);
@@ -92,7 +86,6 @@ export default function RecordTab({ profile }: Props) {
         group: rec.student.group,
         role: rec.student.role,
         name: rec.student.name,
-        phone: rec.student.phoneKey,
         cells,
         doneCount,
         minutes: Math.round(totalSec / 60),
@@ -105,7 +98,7 @@ export default function RecordTab({ profile }: Props) {
   }, [records, courses, onlyRecorded]);
 
   const handleExport = () => {
-    const header = ['區域', 'uid', '教室', '組別', '身份', '姓名', '電話', ...courses.map((c) => c.title), '完課數', '已補時數(分)', '最後更新'];
+    const header = ['區域', '學員代碼', '母班', '組別', '身份', '姓名', ...courses.map((c) => c.title), '完課數', '已補時數(分)', '最後更新'];
     const body = rows.map((r) => [
       region,
       r.studentId,
@@ -113,7 +106,6 @@ export default function RecordTab({ profile }: Props) {
       r.group,
       r.role,
       r.name,
-      r.phone,
       ...courses.map((c) => r.cells[c.courseId] ?? ''),
       r.doneCount,
       r.minutes,
@@ -127,27 +119,25 @@ export default function RecordTab({ profile }: Props) {
       <div className="admin-toolbar">
         <h2>補課記錄</h2>
         <div className="row-gap">
-          {profile.role === 'course' && (
-            <label className="field inline">
-              <span>區域</span>
-              <select
-                className="select"
-                style={{ width: 120 }}
-                value={region}
-                onChange={(e) => {
-                  setRegion(e.target.value);
-                  setPrefRegion(e.target.value);
-                }}
-              >
-                <option value="">請選擇</option>
-                {REGIONS.map((r) => (
-                  <option key={r} value={r}>
-                    {r}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
+          <label className="field inline">
+            <span>區域</span>
+            <select
+              className="select"
+              style={{ width: 120 }}
+              value={region}
+              onChange={(e) => {
+                setRegion(e.target.value);
+                setPrefRegion(e.target.value);
+              }}
+            >
+              <option value="">請選擇</option>
+              {REGIONS.map((r) => (
+                <option key={r} value={r}>
+                  {r}
+                </option>
+              ))}
+            </select>
+          </label>
           <button className="btn primary" onClick={load} disabled={busy || !region}>
             {busy ? '讀取中…' : '讀取'}
           </button>
@@ -191,9 +181,9 @@ export default function RecordTab({ profile }: Props) {
                 <table className="admin-table compact">
                   <thead>
                     <tr>
-                      <th>uid</th>
+                      <th>學員代碼</th>
                       <th>姓名</th>
-                      <th>教室</th>
+                      <th>母班</th>
                       <th>組別</th>
                       <th>身份</th>
                       {courses.map((c) => (
@@ -207,7 +197,7 @@ export default function RecordTab({ profile }: Props) {
                   </thead>
                   <tbody>
                     {rows.slice(0, 300).map((r) => (
-                      <tr key={r.studentId || r.phone}>
+                      <tr key={r.studentId}>
                         <td className="mono">{r.studentId}</td>
                         <td>
                           <strong>{r.name}</strong>

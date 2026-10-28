@@ -1,33 +1,29 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { downloadCsv } from '../../lib/csv';
 import {
   deleteStudent,
   importRoster,
   listStudentsInRegion,
-  maskPhone,
+  parseRosterFile,
   parseRosterText,
 } from '../../lib/roster';
 import { getPrefRegion, setPrefRegion } from '../../lib/adminPrefs';
 import { REGIONS } from '../../lib/regions';
-import type { AdminProfile, Student } from '../../types';
+import type { Student } from '../../types';
+import type { RosterRow } from '../../lib/roster';
 
-interface Props {
-  profile: AdminProfile;
-}
+const TEMPLATE_HEADER = ['學員代碼', '學員姓名', '母班行政組織', '大組', '小組', '身份別'];
 
-const TEMPLATE_HEADER = ['uid', '區域', '教室', '組別', '身份', '姓名', '電話'];
-
-export default function StudentTab({ profile }: Props) {
-  const fixedRegion = profile.role === 'region' ? profile.region : '';
-  const [region, setRegion] = useState(fixedRegion || getPrefRegion());
+export default function StudentTab() {
+  const [region, setRegion] = useState(getPrefRegion());
   const [students, setStudents] = useState<Student[] | null>(null);
+  const [fileName, setFileName] = useState('');
   const [text, setText] = useState('');
+  const [parsed, setParsed] = useState<{ rows: RosterRow[]; errors: string[] } | null>(null);
   const [search, setSearch] = useState('');
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-
-  const parsed = useMemo(() => (text.trim() ? parseRosterText(text) : null), [text]);
 
   const reload = useCallback(() => {
     if (!region) {
@@ -49,14 +45,25 @@ export default function StudentTab({ profile }: Props) {
 
   const handleFile = async (file: File | undefined) => {
     if (!file) return;
-    setText(await file.text());
+    setFileName(file.name);
+    setMessage(null);
+    setError(null);
+    try {
+      setParsed(await parseRosterFile(file));
+    } catch (e) {
+      setParsed(null);
+      setError('讀取檔案失敗：' + (e instanceof Error ? e.message : String(e)));
+    }
+  };
+
+  const handleText = (value: string) => {
+    setText(value);
+    setFileName('');
+    setParsed(value.trim() ? parseRosterText(value) : null);
   };
 
   const handleTemplate = () => {
-    downloadCsv(`學員名單範本_${region || '空白'}.csv`, [
-      TEMPLATE_HEADER,
-      ['', region, '', '', '', '', ''],
-    ]);
+    downloadCsv(`學員名單範本_${region || '空白'}.csv`, [TEMPLATE_HEADER]);
   };
 
   const handleImport = async () => {
@@ -67,11 +74,11 @@ export default function StudentTab({ profile }: Props) {
     try {
       const result = await importRoster(region, parsed.rows);
       const parts = [`已匯入 ${result.created} 筆到「${region}」`];
-      if (result.duplicates.length) parts.push(`檔案內重複電話：${result.duplicates.join('、')}`);
-      if (result.regionMismatch.length)
-        parts.push(`區域欄與指定區域不同（仍以「${region}」匯入）：${result.regionMismatch.join('、')}`);
+      if (result.duplicates.length) parts.push(`檔案內重複代碼：${result.duplicates.join('、')}`);
       setMessage(parts.join('｜'));
+      setParsed(null);
       setText('');
+      setFileName('');
       reload();
     } catch (e) {
       setError('匯入失敗：' + (e instanceof Error ? e.message : String(e)));
@@ -83,7 +90,7 @@ export default function StudentTab({ profile }: Props) {
   const handleDelete = async (s: Student) => {
     if (!window.confirm(`刪除「${s.name}」的名單與補課進度？`)) return;
     try {
-      await deleteStudent(s.region, s.phoneKey);
+      await deleteStudent(s.region, s.studentId);
       reload();
     } catch (e) {
       setError('刪除失敗：' + (e instanceof Error ? e.message : String(e)));
@@ -95,10 +102,9 @@ export default function StudentTab({ profile }: Props) {
     if (!q) return true;
     return (
       s.name.includes(q) ||
-      s.phoneKey.includes(q) ||
+      s.studentId.includes(q) ||
       s.classroom.includes(q) ||
-      s.group.includes(q) ||
-      s.studentId.includes(q)
+      s.group.includes(q)
     );
   });
 
@@ -106,28 +112,25 @@ export default function StudentTab({ profile }: Props) {
     <div className="admin-home">
       <div className="admin-toolbar">
         <h2>學員名單</h2>
-        {profile.role === 'region' && <span className="hint">{fixedRegion}</span>}
-        {profile.role === 'course' && (
-          <label className="field inline">
-            <span>區域</span>
-            <select
-              className="select"
-              style={{ width: 130 }}
-              value={region}
-              onChange={(e) => {
-                setRegion(e.target.value);
-                setPrefRegion(e.target.value);
-              }}
-            >
-              <option value="">請選擇</option>
-              {REGIONS.map((r) => (
-                <option key={r} value={r}>
-                  {r}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
+        <label className="field inline">
+          <span>區域</span>
+          <select
+            className="select"
+            style={{ width: 130 }}
+            value={region}
+            onChange={(e) => {
+              setRegion(e.target.value);
+              setPrefRegion(e.target.value);
+            }}
+          >
+            <option value="">請選擇</option>
+            {REGIONS.map((r) => (
+              <option key={r} value={r}>
+                {r}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
 
       {!region ? (
@@ -141,30 +144,54 @@ export default function StudentTab({ profile }: Props) {
               <h3>匯入名單</h3>
               <div className="row-gap">
                 <button className="btn small" onClick={handleTemplate}>
-                  下載空白範本
+                  下載範本
                 </button>
-                <label className="btn small">
+                <label className="btn small primary-ghost">
                   選擇檔案
                   <input
                     type="file"
-                    accept=".csv,.txt,text/csv"
+                    accept=".xlsx,.xls,.csv,.txt"
                     hidden
-                    onChange={(e) => handleFile(e.target.files?.[0])}
+                    onChange={(e) => void handleFile(e.target.files?.[0])}
                   />
                 </label>
               </div>
             </div>
             <p className="hint">
-              欄位：uid、區域、教室、組別、身份、姓名、電話。區域以本頁選擇的「{region}」為準。
+              可直接上傳系統匯出的「學員名單查詢結果」xlsx；或貼上表格。
             </p>
-            <textarea
-              className="input mono"
-              rows={7}
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              placeholder={'uid\t區域\t教室\t組別\t身份\t姓名\t電話'}
-            />
-            <div className="row-gap" style={{ marginTop: 10 }}>
+
+            <div
+              className={`dropzone ${fileName ? 'has-file' : ''}`}
+              onClick={() => document.getElementById('roster-file')?.click()}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => {
+                e.preventDefault();
+                void handleFile(e.dataTransfer.files?.[0]);
+              }}
+            >
+              <input
+                id="roster-file"
+                type="file"
+                accept=".xlsx,.xls,.csv,.txt"
+                hidden
+                onChange={(e) => void handleFile(e.target.files?.[0])}
+              />
+              {fileName ? <strong>{fileName}</strong> : <span>把檔案拖進來，或點這裡選擇</span>}
+            </div>
+
+            <details className="paste-box">
+              <summary>或用貼上</summary>
+              <textarea
+                className="input mono"
+                rows={5}
+                value={text}
+                onChange={(e) => handleText(e.target.value)}
+                placeholder={'學員代碼\t學員姓名\t母班行政組織\t大組\t小組\t身份別'}
+              />
+            </details>
+
+            <div className="row-gap" style={{ marginTop: 12 }}>
               <button
                 className="btn primary"
                 onClick={handleImport}
@@ -174,11 +201,12 @@ export default function StudentTab({ profile }: Props) {
               </button>
               {parsed && (
                 <span className="hint">
-                  讀到 {parsed.rows.length} 筆可匯入
+                  {parsed.rows.length} 筆可匯入
                   {parsed.errors.length ? `，${parsed.errors.length} 筆有問題` : ''}
                 </span>
               )}
             </div>
+
             {parsed && parsed.errors.length > 0 && (
               <ul className="error-list">
                 {parsed.errors.slice(0, 8).map((e) => (
@@ -194,12 +222,12 @@ export default function StudentTab({ profile }: Props) {
           <div className="panel" style={{ marginTop: 16 }}>
             <div className="section-head">
               <h3>
-                「{region}」名單（{students?.length ?? 0} 人）
+                {region}（{students?.length ?? 0} 人）
               </h3>
               <input
                 className="input"
                 style={{ width: 200 }}
-                placeholder="搜尋姓名 / 電話 / 教室"
+                placeholder="搜尋代碼 / 姓名 / 教室"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
@@ -213,26 +241,24 @@ export default function StudentTab({ profile }: Props) {
                 <table className="admin-table">
                   <thead>
                     <tr>
-                      <th>uid</th>
-                      <th>教室</th>
+                      <th>學員代碼</th>
+                      <th>姓名</th>
+                      <th>母班</th>
                       <th>組別</th>
                       <th>身份</th>
-                      <th>姓名</th>
-                      <th>電話</th>
                       <th />
                     </tr>
                   </thead>
                   <tbody>
                     {filtered.map((s) => (
-                      <tr key={s.phoneKey}>
+                      <tr key={s.studentId}>
                         <td className="mono">{s.studentId}</td>
-                        <td>{s.classroom}</td>
-                        <td>{s.group}</td>
-                        <td>{s.role}</td>
                         <td>
                           <strong>{s.name}</strong>
                         </td>
-                        <td className="mono">{maskPhone(s.phoneKey)}</td>
+                        <td>{s.classroom}</td>
+                        <td>{s.group}</td>
+                        <td>{s.role}</td>
                         <td className="ta-right">
                           <button className="btn tiny ghost danger" onClick={() => handleDelete(s)}>
                             刪除

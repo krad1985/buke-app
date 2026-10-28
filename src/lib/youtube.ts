@@ -5,6 +5,7 @@ export interface YTPlayer {
   getCurrentTime(): number;
   getDuration(): number;
   getPlayerState(): number;
+  setPlaybackRate(rate: number): void;
   destroy(): void;
 }
 

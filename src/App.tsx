@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+﻿import { useCallback, useEffect, useMemo, useState } from 'react';
 import AdminApp from './components/admin/AdminApp';
 import CourseList from './components/CourseList';
 import LessonView from './components/LessonView';
-import PhoneGate from './components/PhoneGate';
+import StudentGate from './components/StudentGate';
 import { withTimeout } from './lib/async';
 import { listAllCourses } from './lib/coursesRepo';
 import { emptyProgress, loadAllLocal, saveLocal } from './lib/progress';
@@ -68,7 +68,7 @@ export default function App() {
       setProgress(loadAllLocal());
       return;
     }
-    withTimeout(loadAllProgress(student.region, student.phoneKey), 12000)
+    withTimeout(loadAllProgress(student.region, student.studentId), 12000)
       .then(setProgress)
       .catch(() => setProgress(loadAllLocal()));
   }, [student]);
@@ -84,7 +84,7 @@ export default function App() {
   const handleSaveProgress = useCallback(
     (p: CourseProgress) => {
       setProgress((prev) => ({ ...prev, [p.courseId]: p }));
-      if (student) void saveProgressFor(student.region, student.phoneKey, p).catch(() => undefined);
+      if (student) void saveProgressFor(student.region, student.studentId, p).catch(() => undefined);
       else saveLocal(p);
     },
     [student]
@@ -152,7 +152,7 @@ export default function App() {
         {route.view === 'admin' ? (
           <AdminApp />
         ) : needGate ? (
-          <PhoneGate onBound={handleBound} onSkip={() => setGuest(true)} />
+          <StudentGate onBound={handleBound} onSkip={() => setGuest(true)} />
         ) : courses === null ? (
           <p className="hint">正在載入課程…</p>
         ) : route.view === 'course' ? (

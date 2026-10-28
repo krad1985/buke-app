@@ -45,8 +45,12 @@ export default function LessonView({ course, initialProgress, onSaveProgress, on
   const [result, setResult] = useState<QuizResult | null>(null);
   const [quizKey, setQuizKey] = useState(0);
   const [reviewIndex, setReviewIndex] = useState<number | null>(null);
+  const [isFull, setIsFull] = useState(false);
+  const [rate, setRate] = useState(1);
 
   const hostRef = useRef<HTMLDivElement>(null);
+  const boxRef = useRef<HTMLDivElement>(null);
+  const rateRef = useRef(1);
   const playerRef = useRef<YTPlayer | null>(null);
   const resumeAtRef = useRef<number | null>(
     saved.lastPositionSec > 0 ? saved.lastPositionSec : null
@@ -98,6 +102,7 @@ export default function LessonView({ course, initialProgress, onSaveProgress, on
               const target =
                 from !== null && from > start ? Math.min(from, (d || from) - 1) : start;
               e.target.seekTo(Math.max(target, 0), true);
+              e.target.setPlaybackRate(rateRef.current);
               e.target.pauseVideo();
               setReady(true);
             },
@@ -175,6 +180,7 @@ export default function LessonView({ course, initialProgress, onSaveProgress, on
           const back = segments[activeIndex];
           if (back) p.seekTo(back.startSec, true);
         } else {
+          if (document.fullscreenElement) void document.exitFullscreen?.();
           setQuizKey((k) => k + 1);
           setResult(null);
           setPhase('quiz');
@@ -193,8 +199,29 @@ export default function LessonView({ course, initialProgress, onSaveProgress, on
     posRef.current = sec;
   };
 
-  const playSeg = (index: number) => {
-    const seg = segments[index];
+  const changeRate = (r: number) => {
+    setRate(r);
+    rateRef.current = r;
+    playerRef.current?.setPlaybackRate(r);
+  };
+
+  const toggleFullscreen = () => {
+    const el = boxRef.current;
+    if (!el) return;
+    if (document.fullscreenElement) {
+      void document.exitFullscreen?.();
+    } else {
+      void el.requestFullscreen?.({ navigationUI: 'hide' }).catch(() => undefined);
+    }
+  };
+
+  useEffect(() => {
+    const onFs = () => setIsFull(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', onFs);
+    return () => document.removeEventListener('fullscreenchange', onFs);
+  }, []);
+
+  const playSeg = (index: number) => {    const seg = segments[index];
     if (!seg) return;
     seekTo(seg.startSec);
     playerRef.current?.playVideo();
@@ -335,8 +362,14 @@ export default function LessonView({ course, initialProgress, onSaveProgress, on
 
       <div className="lesson-grid">
         <div className="lesson-main">
-          <div className="player-wrap">
-            <div className="player-host" ref={hostRef} />
+          <div className="player-box" ref={boxRef}>
+            <div className="player-wrap">
+              <div className="player-host" ref={hostRef} />
+              <div
+                className="player-shield"
+                onClick={phase === 'intro' ? handleStart : handleTogglePlay}
+                role="presentation"
+              />
 
             {!ready && !loadError && (
               <div className="player-overlay">
@@ -379,6 +412,82 @@ export default function LessonView({ course, initialProgress, onSaveProgress, on
             )}
           </div>
 
+            {phase !== 'finished' && (
+              <div className="controls">
+                <button
+                  className="btn icon"
+                  onClick={phase === 'intro' ? handleStart : handleTogglePlay}
+                  disabled={!ready || phase === 'quiz' || !!loadError}
+                  aria-label={phase === 'intro' ? '開始上課' : playing ? '暫停' : '播放'}
+                >
+                  {phase === 'intro' ? '▶' : playing ? '❚❚' : '▶'}
+                </button>
+
+                <input
+                  className="seek"
+                  type="range"
+                  min={segStart}
+                  max={segEnd || 1}
+                  step={0.1}
+                  value={Math.min(Math.max(currentTime, segStart), segEnd || 1)}
+                  onChange={(e) => seekTo(Number(e.target.value))}
+                  disabled={!ready || phase !== 'playing'}
+                  aria-label="段落內進度"
+                />
+
+                <span className="time">
+                  {fmtTime(Math.max(currentTime - segStart, 0))} /{' '}
+                  {fmtTime(Math.max(segEnd - segStart, 0))}
+                </span>
+
+                <select
+                  className="speed"
+                  value={rate}
+                  onChange={(e) => changeRate(Number(e.target.value))}
+                  disabled={!ready}
+                  aria-label="播放速度"
+                >
+                  {[0.75, 1, 1.25, 1.5, 2].map((r) => (
+                    <option key={r} value={r}>
+                      {r}x
+                    </option>
+                  ))}
+                </select>
+
+                <button
+                  className="btn tiny"
+                  onClick={toggleFullscreen}
+                  disabled={!ready}
+                  aria-label="全螢幕"
+                >
+                  {isFull ? '縮小' : '全螢幕'}
+                </button>
+
+                <button
+                  className="btn tiny"
+                  onClick={() => guardSeg && playSeg(guardSeg.segIndex)}
+                  disabled={!ready || phase !== 'playing'}
+                >
+                  重看本段
+                </button>
+
+                {qaMode && (
+                  <button
+                    className="btn tiny ghost"
+                    title="跳到目前段落終點"
+                    onClick={() => {
+                      if (!guardSeg) return;
+                      seekTo(Math.max(effEnd(guardSeg) - 0.2, guardSeg.startSec));
+                    }}
+                    disabled={!ready || phase !== 'playing'}
+                  >
+                    跳結尾
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
           {reviewIndex !== null && reviewSeg && (
             <div className="notice review">
               <span>重看第 {reviewSeg.segIndex + 1} 段</span>
@@ -392,57 +501,6 @@ export default function LessonView({ course, initialProgress, onSaveProgress, on
             <p className="notice warn">
               段落起點（{fmtTime(activeSeg?.startSec ?? 0)}）超過影片長度（{fmtTime(duration)}）。
             </p>
-          )}
-
-          {phase !== 'finished' && (
-            <div className="controls">
-              <button
-                className="btn icon"
-                onClick={phase === 'intro' ? handleStart : handleTogglePlay}
-                disabled={!ready || phase === 'quiz' || !!loadError}
-                aria-label={phase === 'intro' ? '開始上課' : playing ? '暫停' : '播放'}
-              >
-                {phase === 'intro' ? '▶' : playing ? '❚❚' : '▶'}
-              </button>
-
-              <input
-                className="seek"
-                type="range"
-                min={segStart}
-                max={segEnd || 1}
-                step={0.1}
-                value={Math.min(Math.max(currentTime, segStart), segEnd || 1)}
-                onChange={(e) => seekTo(Number(e.target.value))}
-                disabled={!ready || phase !== 'playing'}
-                aria-label="段落內進度"
-              />
-
-              <span className="time">
-                {fmtTime(Math.max(currentTime - segStart, 0))} / {fmtTime(Math.max(segEnd - segStart, 0))}
-              </span>
-
-              <button
-                className="btn tiny"
-                onClick={() => guardSeg && playSeg(guardSeg.segIndex)}
-                disabled={!ready || phase !== 'playing'}
-              >
-                重看本段
-              </button>
-
-              {qaMode && (
-                <button
-                  className="btn tiny ghost"
-                  title="跳到目前段落終點，用來快速檢查題目設定"
-                  onClick={() => {
-                    if (!guardSeg) return;
-                    seekTo(Math.max(effEnd(guardSeg) - 0.2, guardSeg.startSec));
-                  }}
-                  disabled={!ready || phase !== 'playing'}
-                >
-                  跳結尾
-                </button>
-              )}
-            </div>
           )}
 
           {phase === 'quiz' && activeSeg && (
