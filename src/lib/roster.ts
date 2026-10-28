@@ -2,7 +2,7 @@ import { collection, deleteDoc, doc, getDoc, getDocs, setDoc, writeBatch } from 
 import { db } from './firebase';
 import type { Student } from '../types';
 
-/* ---------------- 學員代碼 ---------------- */
+/* ---------------- 識別碼 ---------------- */
 
 export function normalizeCode(input: string): string {
   return (input ?? '').trim().toUpperCase().replace(/\s/g, '');
@@ -12,22 +12,47 @@ export function isValidCode(code: string): boolean {
   return /^[A-Z0-9]{4,20}$/.test(code);
 }
 
+export function normalizePhone(input: string): string {
+  let d = (input ?? '').replace(/[^\d]/g, '');
+  if (d.startsWith('886')) d = '0' + d.slice(3);
+  return d;
+}
+
+export function isValidPhone(key: string): boolean {
+  return /^0\d{8,9}$/.test(key);
+}
+
+/** 學員輸入的代碼或手機 → 查詢用的鍵 */
+export function toLookupKey(input: string): string {
+  const t = (input ?? '').trim();
+  if (!t) return '';
+  return /[A-Za-z]/.test(t) ? normalizeCode(t) : normalizePhone(t);
+}
+
 /* ---------------- 讀寫 ---------------- */
 
 const studentDoc = (region: string, studentId: string) =>
   doc(db, 'regions', region, 'students', studentId);
 
-/** 學員以代碼登入：先查索引取得區域，再取學員資料 */
-export async function findStudentByCode(code: string): Promise<Student | null> {
-  const key = normalizeCode(code);
-  if (!isValidCode(key)) return null;
-  const idx = await getDoc(doc(db, 'ids', key));
+/**
+ * 登入索引放在 phones 集合（學員代碼與手機都放這裡）。
+ * 沿用既有集合名稱，避免為了新增集合而重貼規則。
+ */
+const indexDoc = (key: string) => doc(db, 'phones', key);
+
+/** 用學員代碼或手機登入 */
+export async function findStudentByLogin(input: string): Promise<Student | null> {
+  const key = toLookupKey(input);
+  if (!key) return null;
+  const idx = await getDoc(indexDoc(key));
   if (!idx.exists()) return null;
-  const region = (idx.data() as { region?: string }).region ?? '';
+  const data = idx.data() as { region?: string; studentId?: string };
+  const region = data.region ?? '';
+  const studentId = data.studentId ?? key;
   if (!region) return null;
-  const snap = await getDoc(studentDoc(region, key));
+  const snap = await getDoc(studentDoc(region, studentId));
   if (!snap.exists()) return null;
-  return { ...(snap.data() as Student), studentId: key, region };
+  return { ...(snap.data() as Student), studentId: snap.id, region };
 }
 
 export async function listStudentsInRegion(region: string): Promise<Student[]> {
@@ -42,13 +67,22 @@ export async function saveStudent(student: Student): Promise<void> {
     ...student,
     updatedAt: Date.now(),
   });
-  await setDoc(doc(db, 'ids', student.studentId), {
-    region: student.region,
-    name: student.name,
-  });
+  await writeIndexes(student);
+}
+
+async function writeIndexes(student: Student): Promise<void> {
+  const base = { region: student.region, name: student.name, studentId: student.studentId };
+  await setDoc(indexDoc(student.studentId), base, { merge: true });
+  const phone = normalizePhone(student.phone ?? '');
+  if (phone && isValidPhone(phone)) {
+    await setDoc(indexDoc(phone), base, { merge: true });
+  }
 }
 
 export async function deleteStudent(region: string, studentId: string): Promise<void> {
+  const snap = await getDoc(studentDoc(region, studentId)).catch(() => null);
+  const phone = normalizePhone((snap?.data() as Student | undefined)?.phone ?? '');
+
   const progressSnap = await getDocs(
     collection(db, 'regions', region, 'students', studentId, 'progress')
   );
@@ -58,7 +92,8 @@ export async function deleteStudent(region: string, studentId: string): Promise<
     await batch.commit();
   }
   await deleteDoc(studentDoc(region, studentId));
-  await deleteDoc(doc(db, 'ids', studentId)).catch(() => undefined);
+  await deleteDoc(indexDoc(studentId)).catch(() => undefined);
+  if (phone) await deleteDoc(indexDoc(phone)).catch(() => undefined);
 }
 
 /* ---------------- 名單解析 ---------------- */
@@ -66,12 +101,26 @@ export async function deleteStudent(region: string, studentId: string): Promise<
 export interface RosterRow {
   studentId: string;
   name: string;
+  phone: string;
   classroom: string;
   group: string;
   role: string;
 }
 
 type ColumnKey = keyof RosterRow | 'groupLarge' | 'groupSmall';
+
+interface XlsxApi {
+  read: (
+    data: ArrayBuffer,
+    opts: { type: 'array' }
+  ) => { SheetNames: string[]; Sheets: Record<string, unknown> };
+  utils: {
+    sheet_to_json: (
+      ws: unknown,
+      opts: { header: 1; raw: false; defval: string }
+    ) => unknown[][];
+  };
+}
 
 const HEADER_MAP: Record<string, ColumnKey> = {
   學員代碼: 'studentId',
@@ -82,6 +131,10 @@ const HEADER_MAP: Record<string, ColumnKey> = {
   學員姓名: 'name',
   姓名: 'name',
   名字: 'name',
+  手機: 'phone',
+  手機號碼: 'phone',
+  電話: 'phone',
+  行動電話: 'phone',
   母班行政組織: 'classroom',
   教室: 'classroom',
   大組: 'groupLarge',
@@ -98,12 +151,17 @@ export function parseRosterMatrix(matrix: string[][]): { rows: RosterRow[]; erro
   const clean = matrix.map((r) => (r ?? []).map((c) => String(c ?? '').trim()));
 
   const headerIndex = clean.findIndex((row) =>
-    row.some((cell) => cell.replace(/\s/g, '') in HEADER_MAP || cell.replace(/\s/g, '').toLowerCase() in HEADER_MAP)
+    row.some((cell) => {
+      const key = cell.replace(/\s/g, '');
+      return key in HEADER_MAP || key.toLowerCase() in HEADER_MAP;
+    })
   );
   if (headerIndex < 0) return { rows: [], errors: ['找不到表頭（需要「學員代碼」與「學員姓名」欄）'] };
 
   const header = clean[headerIndex].map((c) => c.replace(/\s/g, ''));
-  const cols: (ColumnKey | null)[] = header.map((c) => HEADER_MAP[c] ?? HEADER_MAP[c.toLowerCase()] ?? null);
+  const cols: (ColumnKey | null)[] = header.map(
+    (c) => HEADER_MAP[c] ?? HEADER_MAP[c.toLowerCase()] ?? null
+  );
 
   const rows: RosterRow[] = [];
   for (let i = headerIndex + 1; i < clean.length; i += 1) {
@@ -132,11 +190,18 @@ export function parseRosterMatrix(matrix: string[][]): { rows: RosterRow[]; erro
       continue;
     }
 
+    const rawPhone = pick('phone');
+    const phone = normalizePhone(rawPhone);
+    if (rawPhone && !isValidPhone(phone)) {
+      errors.push(`第 ${i + 1} 列（${name}）：手機「${rawPhone}」格式不對，已略過手機欄位`);
+    }
+
     const big = pick('groupLarge');
     const small = pick('groupSmall');
     rows.push({
       studentId,
       name,
+      phone: isValidPhone(phone) ? phone : '',
       classroom: pick('classroom'),
       group: big && small ? `${big}-${small}` : big || small,
       role: pick('role'),
@@ -168,7 +233,6 @@ function splitLine(line: string, delim: string): string[] {
   return out;
 }
 
-/** 貼上的文字（Tab 或逗號分隔） */
 export function parseRosterText(text: string): { rows: RosterRow[]; errors: string[] } {
   const lines = text.split(/\r?\n/).filter((l) => l.trim());
   if (lines.length === 0) return { rows: [], errors: ['沒有資料'] };
@@ -176,16 +240,16 @@ export function parseRosterText(text: string): { rows: RosterRow[]; errors: stri
   return parseRosterMatrix(lines.map((l) => splitLine(l, delim)));
 }
 
-/** 讀取上傳的檔案（.xlsx / .xls / .csv） */
 export async function parseRosterFile(file: File): Promise<{ rows: RosterRow[]; errors: string[] }> {
   if (/\.(csv|txt)$/i.test(file.name)) {
     return parseRosterText(await file.text());
   }
-  const XLSX = await import('xlsx');
+  const mod = (await import('xlsx')) as unknown as { default?: XlsxApi };
+  const XLSX: XlsxApi = mod.default ?? (mod as unknown as XlsxApi);
   const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
   const ws = wb.Sheets[wb.SheetNames[0]];
   if (!ws) return { rows: [], errors: ['檔案裡沒有工作表'] };
-  const matrix = XLSX.utils.sheet_to_json<string[]>(ws, { header: 1, raw: false, defval: '' });
+  const matrix = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '' });
   return parseRosterMatrix(matrix as string[][]);
 }
 
@@ -207,16 +271,19 @@ export async function importRoster(region: string, rows: RosterRow[]): Promise<I
   for (let i = 0; i < entries.length; i += 200) {
     const batch = writeBatch(db);
     for (const [studentId, row] of entries.slice(i, i + 200)) {
+      const index = { region, name: row.name, studentId };
       batch.set(studentDoc(region, studentId), {
         studentId,
         name: row.name,
+        phone: row.phone || '',
         region,
         classroom: row.classroom,
         group: row.group,
         role: row.role,
         updatedAt: Date.now(),
       });
-      batch.set(doc(db, 'ids', studentId), { region, name: row.name }, { merge: true });
+      batch.set(indexDoc(studentId), index, { merge: true });
+      if (row.phone) batch.set(indexDoc(row.phone), index, { merge: true });
       created += 1;
     }
     await batch.commit();

@@ -7,6 +7,7 @@ import { loadRegionRecords, type StudentRecord } from '../../lib/progressRepo';
 import { getPrefRegion, setPrefRegion } from '../../lib/adminPrefs';
 import { REGIONS } from '../../lib/regions';
 import type { Course } from '../../types';
+import type { AdminProfile } from '../../types';
 
 const fmtDate = (ts?: number) => (ts ? new Date(ts).toLocaleString('zh-TW', { hour12: false }) : '');
 
@@ -22,8 +23,8 @@ interface Row {
   lastUpdated: number;
 }
 
-export default function RecordTab() {
-  const [region, setRegion] = useState(getPrefRegion());
+export default function RecordTab({ profile }: { profile: AdminProfile }) {
+  const [region, setRegion] = useState(profile.role === 'region' ? profile.region : getPrefRegion());
   const [courses, setCourses] = useState<Course[]>([]);
   const [records, setRecords] = useState<StudentRecord[] | null>(null);
   const [onlyRecorded, setOnlyRecorded] = useState(false);
@@ -119,25 +120,27 @@ export default function RecordTab() {
       <div className="admin-toolbar">
         <h2>補課記錄</h2>
         <div className="row-gap">
-          <label className="field inline">
-            <span>區域</span>
-            <select
-              className="select"
-              style={{ width: 120 }}
-              value={region}
-              onChange={(e) => {
-                setRegion(e.target.value);
-                setPrefRegion(e.target.value);
-              }}
-            >
-              <option value="">請選擇</option>
-              {REGIONS.map((r) => (
-                <option key={r} value={r}>
-                  {r}
-                </option>
-              ))}
-            </select>
-          </label>
+          {profile.role !== 'region' && (
+            <label className="field inline">
+              <span>區域</span>
+              <select
+                className="select"
+                style={{ width: 120 }}
+                value={region}
+                onChange={(e) => {
+                  setRegion(e.target.value);
+                  setPrefRegion(e.target.value);
+                }}
+              >
+                <option value="">請選擇</option>
+                {REGIONS.map((r) => (
+                  <option key={r} value={r}>
+                    {r}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           <button className="btn primary" onClick={load} disabled={busy || !region}>
             {busy ? '讀取中…' : '讀取'}
           </button>

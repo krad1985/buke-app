@@ -10,12 +10,17 @@ import {
 import { getPrefRegion, setPrefRegion } from '../../lib/adminPrefs';
 import { REGIONS } from '../../lib/regions';
 import type { Student } from '../../types';
+import type { AdminProfile } from '../../types';
 import type { RosterRow } from '../../lib/roster';
 
-const TEMPLATE_HEADER = ['學員代碼', '學員姓名', '母班行政組織', '大組', '小組', '身份別'];
+const TEMPLATE_HEADER = ['學員代碼', '學員姓名', '母班行政組織', '大組', '小組', '身份別', '手機'];
 
-export default function StudentTab() {
-  const [region, setRegion] = useState(getPrefRegion());
+interface Props {
+  profile: AdminProfile;
+}
+
+export default function StudentTab({ profile }: Props) {
+  const [region, setRegion] = useState(profile.role === 'region' ? profile.region : getPrefRegion());
   const [students, setStudents] = useState<Student[] | null>(null);
   const [fileName, setFileName] = useState('');
   const [text, setText] = useState('');
@@ -112,25 +117,29 @@ export default function StudentTab() {
     <div className="admin-home">
       <div className="admin-toolbar">
         <h2>學員名單</h2>
-        <label className="field inline">
-          <span>區域</span>
-          <select
-            className="select"
-            style={{ width: 130 }}
-            value={region}
-            onChange={(e) => {
-              setRegion(e.target.value);
-              setPrefRegion(e.target.value);
-            }}
-          >
-            <option value="">請選擇</option>
-            {REGIONS.map((r) => (
-              <option key={r} value={r}>
-                {r}
-              </option>
-            ))}
-          </select>
-        </label>
+        {profile.role === 'region' ? (
+          <span className="hint">{region}</span>
+        ) : (
+          <label className="field inline">
+            <span>區域</span>
+            <select
+              className="select"
+              style={{ width: 130 }}
+              value={region}
+              onChange={(e) => {
+                setRegion(e.target.value);
+                setPrefRegion(e.target.value);
+              }}
+            >
+              <option value="">請選擇</option>
+              {REGIONS.map((r) => (
+                <option key={r} value={r}>
+                  {r}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
       </div>
 
       {!region ? (
@@ -243,6 +252,7 @@ export default function StudentTab() {
                     <tr>
                       <th>學員代碼</th>
                       <th>姓名</th>
+                      <th>手機</th>
                       <th>母班</th>
                       <th>組別</th>
                       <th>身份</th>
@@ -256,6 +266,7 @@ export default function StudentTab() {
                         <td>
                           <strong>{s.name}</strong>
                         </td>
+                        <td className="mono">{s.phone || ''}</td>
                         <td>{s.classroom}</td>
                         <td>{s.group}</td>
                         <td>{s.role}</td>

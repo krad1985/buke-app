@@ -59,6 +59,8 @@ export interface Student {
   /** 學員代碼，例如 TW00103698；同時是資料庫文件 ID */
   studentId: string;
   name: string;
+  /** 手機（選填），可作為登入依據 */
+  phone?: string;
   /** 母班行政組織 */
   classroom: string;
   /** 大組-小組 */
@@ -67,6 +69,19 @@ export interface Student {
   role: string;
   region: string;
   updatedAt: number;
+}
+
+export type AdminRole = 'course' | 'region';
+
+/** 管理員（doc ID = 帳號） */
+export interface AdminProfile {
+  account: string;
+  name: string;
+  role: AdminRole;
+  region: string;
+  enabled: boolean;
+  /** 明文密碼：防君子模式，前端比對用 */
+  pass: string;
 }
 
 export interface CourseProgress {
