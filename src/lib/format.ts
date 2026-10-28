@@ -18,7 +18,7 @@ export function fmtDuration(sec: number): string {
   return `${m} 分`;
 }
 
-/** 段落長度（秒）加總，用於計算已補時數 */
+/** 段落長度（秒）加總，用於計算學習時數 */
 export function segmentSeconds(
   segments: { startSec: number; endSec: number }[],
   indexes: number[]

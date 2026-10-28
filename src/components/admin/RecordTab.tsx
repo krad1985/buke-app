@@ -99,7 +99,7 @@ export default function RecordTab({ profile }: { profile: AdminProfile }) {
   }, [records, courses, onlyRecorded]);
 
   const handleExport = () => {
-    const header = ['區域', '學員代碼', '母班', '組別', '身份', '姓名', ...courses.map((c) => c.title), '完課數', '已補時數(分)', '最後更新'];
+    const header = ['區域', '學員代碼', '母班', '組別', '身份', '姓名', ...courses.map((c) => c.title), '完課數', '已學習時數(分)', '最後更新'];
     const body = rows.map((r) => [
       region,
       r.studentId,
@@ -112,13 +112,13 @@ export default function RecordTab({ profile }: { profile: AdminProfile }) {
       r.minutes,
       fmtDate(r.lastUpdated),
     ]);
-    downloadCsv(`補課總表_${region}_${new Date().toISOString().slice(0, 10)}.csv`, [header, ...body]);
+    downloadCsv(`學習記錄_${region}_${new Date().toISOString().slice(0, 10)}.csv`, [header, ...body]);
   };
 
   return (
     <div className="admin-home">
       <div className="admin-toolbar">
-        <h2>補課記錄</h2>
+        <h2>學習記錄</h2>
         <div className="row-gap">
           {profile.role !== 'region' && (
             <label className="field inline">

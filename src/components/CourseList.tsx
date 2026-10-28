@@ -56,7 +56,7 @@ export default function CourseList({ courses, progress, onSelect }: Props) {
               </div>
               <p className="card-progress">
                 {done} / {total} 段通過
-                {watched > 0 && <>・已補 {fmtDuration(watched)}</>}
+                {watched > 0 && <>・已學習 {fmtDuration(watched)}</>}
               </p>
             </button>
           );

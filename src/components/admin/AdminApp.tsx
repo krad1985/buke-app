@@ -14,7 +14,7 @@ type TabId = 'courses' | 'students' | 'records' | 'admins' | 'password';
 const TAB_LABELS: Record<TabId, string> = {
   courses: '課程管理',
   students: '學員名單',
-  records: '補課記錄',
+  records: '學習記錄',
   admins: '管理員',
   password: '我的密碼',
 };

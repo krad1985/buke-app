@@ -124,7 +124,7 @@ export default function StudentTab({ profile }: { profile: AdminProfile }) {
 
   const handleBatchDelete = async () => {
     if (selected.length === 0) return;
-    if (!window.confirm(`刪除選取的 ${selected.length} 位學員（含補課進度）？`)) return;
+    if (!window.confirm(`刪除選取的 ${selected.length} 位學員（含學習進度）？`)) return;
     setBusy(true);
     try {
       await deleteStudents(region, selected);
@@ -426,7 +426,7 @@ export default function StudentTab({ profile }: { profile: AdminProfile }) {
                           <button
                             className="btn tiny ghost danger"
                             onClick={async () => {
-                              if (!window.confirm(`刪除「${s.name}」的名單與補課進度？`)) return;
+                              if (!window.confirm(`刪除「${s.name}」的名單與學習進度？`)) return;
                               try {
                                 await deleteStudent(s.region, s.studentId);
                                 reload();

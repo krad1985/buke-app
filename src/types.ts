@@ -94,6 +94,6 @@ export interface CourseProgress {
   attempts: Record<string, number>;
   lastPositionSec: number;
   updatedAt: number;
-  /** 累計已補課時數（秒）：通過的段落長度加總 */
+  /** 累計學習時數（秒）：通過的段落長度加總 */
   watchedSec?: number;
 }

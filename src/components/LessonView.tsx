@@ -356,7 +356,7 @@ export default function LessonView({ course, initialProgress, onSaveProgress, on
           <h1>{course.title}</h1>
           <p className="hint">
             已通過 {totalDone} / {segments.length} 段
-            {watchedSec > 0 && <>・已補 {fmtDuration(watchedSec)}</>}
+            {watchedSec > 0 && <>・已學習 {fmtDuration(watchedSec)}</>}
           </p>
         </div>
       </div>
@@ -400,7 +400,7 @@ export default function LessonView({ course, initialProgress, onSaveProgress, on
               <div className="player-overlay start">
                 <p className="overlay-eyebrow">全部段落已通過</p>
                 <h2>本課程已完成</h2>
-                <p className="hint">累計補課時數：{fmtDuration(watchedSec)}</p>
+                <p className="hint">累計學習時數：{fmtDuration(watchedSec)}</p>
                 <div className="row-center">
                   <button className="btn" onClick={onExit}>
                     回課程列表
