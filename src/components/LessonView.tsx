@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { fmtDuration, fmtTime, segmentSeconds } from '../lib/format';
+import { IconPause, IconPlay } from './Icons';
 import { loadYouTubeApi, type YTPlayer } from '../lib/youtube';
 import type { AnswerRecord, Course, CourseProgress, Segment } from '../types';
 import QuizPanel, { type QuizResult } from './QuizPanel';
@@ -420,7 +421,7 @@ export default function LessonView({ course, initialProgress, onSaveProgress, on
                   disabled={!ready || phase === 'quiz' || !!loadError}
                   aria-label={phase === 'intro' ? '開始上課' : playing ? '暫停' : '播放'}
                 >
-                  {phase === 'intro' ? '▶' : playing ? '❚❚' : '▶'}
+                  {phase === 'intro' || !playing ? <IconPlay /> : <IconPause />}
                 </button>
 
                 <input

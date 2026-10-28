@@ -1,4 +1,5 @@
 import { fmtTime } from '../lib/format';
+import { IconCheck, IconLock, IconPlay } from './Icons';
 import type { Segment } from '../types';
 
 interface Props {
@@ -35,7 +36,7 @@ export default function SegmentList({ segments, activeIndex, passed, allowRewatc
             >
               <div className="segment-main">
                 <span className="segment-state" aria-hidden="true">
-                  {isPassed ? '✓' : isLocked ? '🔒' : '▶'}
+                  {isPassed ? <IconCheck /> : isLocked ? <IconLock /> : <IconPlay size={12} />}
                 </span>
                 <div>
                   <p className="segment-title">{seg.title}</p>

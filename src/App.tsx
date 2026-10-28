@@ -3,6 +3,7 @@ import AdminApp from './components/admin/AdminApp';
 import CourseList from './components/CourseList';
 import LessonView from './components/LessonView';
 import StudentGate from './components/StudentGate';
+import { IconBook } from './components/Icons';
 import { withTimeout } from './lib/async';
 import { listAllCourses } from './lib/coursesRepo';
 import { emptyProgress, loadAllLocal, saveLocal } from './lib/progress';
@@ -124,15 +125,17 @@ export default function App() {
     <div className="app">
       <header className="app-header">
         <button className="brand" onClick={close}>
-          <span className="brand-mark" aria-hidden="true" />
+          <span className="brand-mark" aria-hidden="true">
+            <IconBook />
+          </span>
           <span>
-            <span className="brand-title">補課系統</span>
-            <span className="brand-sub">影片分段學習</span>
+            <span className="brand-title">線上學習系統</span>
+            <span className="brand-sub">課程影片與學習進度</span>
           </span>
         </button>
 
         {route.view === 'admin' ? (
-          <span className="anon-badge admin">管理後台</span>
+          <span className="anon-badge">管理後台</span>
         ) : student ? (
           <span className="who">
             <span className="who-name">

@@ -1,11 +1,12 @@
-# 補課系統（buke-app）
+# 線上學習系統（buke-app）
 
-影片分段＋段落檢核。看完一段、答對題目才解鎖下一段；名單分區匯入，補課記錄依區域匯出。
+影片分段＋段落檢核。看完一段、答對題目才解鎖下一段；名單分區匯入，學習記錄依區域匯出。
 
 - 前端：Vite + React 18 + TypeScript
 - 影片：YouTube 內嵌（公開或不公開）
 - 資料庫：Firebase Firestore（不使用 Firebase Auth）
 - 網站：<https://krad1985.github.io/buke-app/>
+- 字體：Noto Serif TC／Noto Sans TC（Google Fonts，SIL Open Font License）
 
 ## 身分
 
