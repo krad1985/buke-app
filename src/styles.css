@@ -1384,6 +1384,32 @@ textarea.input {
   margin: 4px 0 8px;
 }
 
+.preview {
+  margin: 12px 0 4px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--line);
+}
+
+.check-col {
+  width: 34px;
+  text-align: center;
+}
+
+.check-col input {
+  cursor: pointer;
+}
+
+.btn.danger {
+  color: var(--bad);
+  border-color: #e7b4ae;
+  background: #fdf0ef;
+}
+
+.btn.tiny.danger {
+  background: transparent;
+  border-color: transparent;
+}
+
 .error-list {
   margin: 10px 0 0;
   padding-left: 20px;

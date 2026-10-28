@@ -13,7 +13,8 @@ export function isValidCode(code: string): boolean {
 }
 
 export function normalizePhone(input: string): string {
-  let d = (input ?? '').replace(/[^\d]/g, '');
+  // 去掉 Excel 文字前置符號（' ’ " `）與所有非數字
+  let d = (input ?? '').replace(/^[\s'’"`]+/, '').replace(/[^\d]/g, '');
   if (d.startsWith('886')) d = '0' + d.slice(3);
   return d;
 }
@@ -62,12 +63,26 @@ export async function listStudentsInRegion(region: string): Promise<Student[]> {
     .sort((a, b) => a.studentId.localeCompare(b.studentId));
 }
 
-export async function saveStudent(student: Student): Promise<void> {
+export async function saveStudent(student: Student, previousPhone?: string): Promise<void> {
   await setDoc(studentDoc(student.region, student.studentId), {
     ...student,
     updatedAt: Date.now(),
   });
   await writeIndexes(student);
+
+  const oldPhone = normalizePhone(previousPhone ?? '');
+  const newPhone = normalizePhone(student.phone ?? '');
+  if (oldPhone && oldPhone !== newPhone) {
+    await deleteDoc(indexDoc(oldPhone)).catch(() => undefined);
+  }
+}
+
+/** 批次刪除（同時清掉進度與登入索引） */
+export async function deleteStudents(region: string, studentIds: string[]): Promise<void> {
+  const chunk = 4;
+  for (let i = 0; i < studentIds.length; i += chunk) {
+    await Promise.all(studentIds.slice(i, i + chunk).map((id) => deleteStudent(region, id)));
+  }
 }
 
 async function writeIndexes(student: Student): Promise<void> {
@@ -135,6 +150,8 @@ const HEADER_MAP: Record<string, ColumnKey> = {
   手機號碼: 'phone',
   電話: 'phone',
   行動電話: 'phone',
+  聯絡電話: 'phone',
+  連絡電話: 'phone',
   母班行政組織: 'classroom',
   教室: 'classroom',
   大組: 'groupLarge',
@@ -191,9 +208,16 @@ export function parseRosterMatrix(matrix: string[][]): { rows: RosterRow[]; erro
     }
 
     const rawPhone = pick('phone');
-    const phone = normalizePhone(rawPhone);
-    if (rawPhone && !isValidPhone(phone)) {
-      errors.push(`第 ${i + 1} 列（${name}）：手機「${rawPhone}」格式不對，已略過手機欄位`);
+    // 表頭沒對到（或欄位空白）時，掃描整列找手機樣式，避免多一欄就讀不到
+    const fallbackPhone =
+      rawPhone ||
+      cells
+        .map((c) => c.trim())
+        .find((c) => /^[\s'’"`]*0\d{8,9}$/.test(c)) ||
+      '';
+    const phone = normalizePhone(fallbackPhone);
+    if (fallbackPhone && !isValidPhone(phone)) {
+      errors.push(`第 ${i + 1} 列（${name}）：手機「${fallbackPhone}」格式不對，已略過手機欄位`);
     }
 
     const big = pick('groupLarge');

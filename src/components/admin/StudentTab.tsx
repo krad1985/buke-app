@@ -1,31 +1,30 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { downloadCsv } from '../../lib/csv';
 import {
   deleteStudent,
+  deleteStudents,
   importRoster,
   listStudentsInRegion,
   parseRosterFile,
   parseRosterText,
+  saveStudent,
 } from '../../lib/roster';
 import { getPrefRegion, setPrefRegion } from '../../lib/adminPrefs';
 import { REGIONS } from '../../lib/regions';
-import type { Student } from '../../types';
-import type { AdminProfile } from '../../types';
+import type { AdminProfile, Student } from '../../types';
 import type { RosterRow } from '../../lib/roster';
 
 const TEMPLATE_HEADER = ['學員代碼', '學員姓名', '母班行政組織', '大組', '小組', '身份別', '手機'];
 
-interface Props {
-  profile: AdminProfile;
-}
-
-export default function StudentTab({ profile }: Props) {
+export default function StudentTab({ profile }: { profile: AdminProfile }) {
   const [region, setRegion] = useState(profile.role === 'region' ? profile.region : getPrefRegion());
   const [students, setStudents] = useState<Student[] | null>(null);
   const [fileName, setFileName] = useState('');
   const [text, setText] = useState('');
   const [parsed, setParsed] = useState<{ rows: RosterRow[]; errors: string[] } | null>(null);
   const [search, setSearch] = useState('');
+  const [selected, setSelected] = useState<string[]>([]);
+  const [editing, setEditing] = useState<Student | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -37,7 +36,10 @@ export default function StudentTab({ profile }: Props) {
     }
     setStudents(null);
     listStudentsInRegion(region)
-      .then(setStudents)
+      .then((list) => {
+        setStudents(list);
+        setSelected([]);
+      })
       .catch((e: unknown) => {
         setStudents([]);
         setError('讀取名單失敗：' + (e instanceof Error ? e.message : String(e)));
@@ -47,6 +49,12 @@ export default function StudentTab({ profile }: Props) {
   useEffect(() => {
     reload();
   }, [reload]);
+
+  const resetParsed = () => {
+    setParsed(null);
+    setText('');
+    setFileName('');
+  };
 
   const handleFile = async (file: File | undefined) => {
     if (!file) return;
@@ -81,9 +89,7 @@ export default function StudentTab({ profile }: Props) {
       const parts = [`已匯入 ${result.created} 筆到「${region}」`];
       if (result.duplicates.length) parts.push(`檔案內重複代碼：${result.duplicates.join('、')}`);
       setMessage(parts.join('｜'));
-      setParsed(null);
-      setText('');
-      setFileName('');
+      resetParsed();
       reload();
     } catch (e) {
       setError('匯入失敗：' + (e instanceof Error ? e.message : String(e)));
@@ -92,26 +98,59 @@ export default function StudentTab({ profile }: Props) {
     }
   };
 
-  const handleDelete = async (s: Student) => {
-    if (!window.confirm(`刪除「${s.name}」的名單與補課進度？`)) return;
+  const filtered = useMemo(() => {
+    const q = search.trim();
+    return (students ?? []).filter((s) => {
+      if (!q) return true;
+      return (
+        s.name.includes(q) ||
+        s.studentId.includes(q) ||
+        (s.phone ?? '').includes(q) ||
+        s.classroom.includes(q) ||
+        s.group.includes(q)
+      );
+    });
+  }, [students, search]);
+
+  const allChecked = filtered.length > 0 && filtered.every((s) => selected.includes(s.studentId));
+
+  const toggleAll = () => {
+    setSelected(allChecked ? [] : filtered.map((s) => s.studentId));
+  };
+
+  const toggleOne = (id: string) => {
+    setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  };
+
+  const handleBatchDelete = async () => {
+    if (selected.length === 0) return;
+    if (!window.confirm(`刪除選取的 ${selected.length} 位學員（含補課進度）？`)) return;
+    setBusy(true);
     try {
-      await deleteStudent(s.region, s.studentId);
+      await deleteStudents(region, selected);
       reload();
     } catch (e) {
       setError('刪除失敗：' + (e instanceof Error ? e.message : String(e)));
+    } finally {
+      setBusy(false);
     }
   };
 
-  const filtered = (students ?? []).filter((s) => {
-    const q = search.trim();
-    if (!q) return true;
-    return (
-      s.name.includes(q) ||
-      s.studentId.includes(q) ||
-      s.classroom.includes(q) ||
-      s.group.includes(q)
-    );
-  });
+  const handleSaveEdit = async () => {
+    if (!editing) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const original = students?.find((s) => s.studentId === editing.studentId);
+      await saveStudent(editing, original?.phone);
+      setEditing(null);
+      reload();
+    } catch (e) {
+      setError('儲存失敗：' + (e instanceof Error ? e.message : String(e)));
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <div className="admin-home">
@@ -155,7 +194,7 @@ export default function StudentTab({ profile }: Props) {
                 <button className="btn small" onClick={handleTemplate}>
                   下載範本
                 </button>
-                <label className="btn small primary-ghost">
+                <label className="btn small">
                   選擇檔案
                   <input
                     type="file"
@@ -166,9 +205,6 @@ export default function StudentTab({ profile }: Props) {
                 </label>
               </div>
             </div>
-            <p className="hint">
-              可直接上傳系統匯出的「學員名單查詢結果」xlsx；或貼上表格。
-            </p>
 
             <div
               className={`dropzone ${fileName ? 'has-file' : ''}`}
@@ -196,9 +232,41 @@ export default function StudentTab({ profile }: Props) {
                 rows={5}
                 value={text}
                 onChange={(e) => handleText(e.target.value)}
-                placeholder={'學員代碼\t學員姓名\t母班行政組織\t大組\t小組\t身份別'}
+                placeholder={'學員代碼\t學員姓名\t母班行政組織\t大組\t小組\t身份別\t手機'}
               />
             </details>
+
+            {parsed && parsed.rows.length > 0 && (
+              <div className="preview">
+                <p className="hint">前 3 筆預覽</p>
+                <div className="table-scroll">
+                  <table className="admin-table compact">
+                    <thead>
+                      <tr>
+                        <th>學員代碼</th>
+                        <th>姓名</th>
+                        <th>手機</th>
+                        <th>母班</th>
+                        <th>組別</th>
+                        <th>身份</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {parsed.rows.slice(0, 3).map((r) => (
+                        <tr key={r.studentId}>
+                          <td className="mono">{r.studentId}</td>
+                          <td>{r.name}</td>
+                          <td className="mono">{r.phone || '—'}</td>
+                          <td>{r.classroom}</td>
+                          <td>{r.group}</td>
+                          <td>{r.role}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
 
             <div className="row-gap" style={{ marginTop: 12 }}>
               <button
@@ -228,19 +296,89 @@ export default function StudentTab({ profile }: Props) {
             {error && <p className="form-error">{error}</p>}
           </div>
 
+          {editing && (
+            <div className="panel" style={{ marginTop: 16 }}>
+              <div className="section-head">
+                <h3>
+                  編輯 {editing.name}
+                  <span className="hint mono"> {editing.studentId}</span>
+                </h3>
+                <div className="row-gap">
+                  <button className="btn" onClick={() => setEditing(null)}>
+                    取消
+                  </button>
+                  <button className="btn primary" onClick={handleSaveEdit} disabled={busy}>
+                    儲存
+                  </button>
+                </div>
+              </div>
+              <div className="form-grid">
+                <label className="field">
+                  <span>姓名</span>
+                  <input
+                    className="input"
+                    value={editing.name}
+                    onChange={(e) => setEditing({ ...editing, name: e.target.value })}
+                  />
+                </label>
+                <label className="field">
+                  <span>手機</span>
+                  <input
+                    className="input mono"
+                    value={editing.phone ?? ''}
+                    onChange={(e) => setEditing({ ...editing, phone: e.target.value })}
+                    placeholder="0912345678"
+                  />
+                </label>
+                <label className="field">
+                  <span>母班</span>
+                  <input
+                    className="input"
+                    value={editing.classroom}
+                    onChange={(e) => setEditing({ ...editing, classroom: e.target.value })}
+                  />
+                </label>
+                <label className="field">
+                  <span>組別</span>
+                  <input
+                    className="input"
+                    value={editing.group}
+                    onChange={(e) => setEditing({ ...editing, group: e.target.value })}
+                  />
+                </label>
+                <label className="field">
+                  <span>身份</span>
+                  <input
+                    className="input"
+                    value={editing.role}
+                    onChange={(e) => setEditing({ ...editing, role: e.target.value })}
+                  />
+                </label>
+              </div>
+            </div>
+          )}
+
           <div className="panel" style={{ marginTop: 16 }}>
             <div className="section-head">
               <h3>
                 {region}（{students?.length ?? 0} 人）
               </h3>
-              <input
-                className="input"
-                style={{ width: 200 }}
-                placeholder="搜尋代碼 / 姓名 / 教室"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
+              <div className="row-gap">
+                {selected.length > 0 && (
+                  <button className="btn small danger" onClick={handleBatchDelete} disabled={busy}>
+                    刪除選取（{selected.length}）
+                  </button>
+                )}
+                <input
+                  className="input"
+                  style={{ width: 200 }}
+                  placeholder="搜尋代碼 / 姓名 / 手機"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
+              </div>
             </div>
+
             {students === null ? (
               <p className="hint">載入中…</p>
             ) : filtered.length === 0 ? (
@@ -250,6 +388,9 @@ export default function StudentTab({ profile }: Props) {
                 <table className="admin-table">
                   <thead>
                     <tr>
+                      <th className="check-col">
+                        <input type="checkbox" checked={allChecked} onChange={toggleAll} aria-label="全選" />
+                      </th>
                       <th>學員代碼</th>
                       <th>姓名</th>
                       <th>手機</th>
@@ -262,6 +403,14 @@ export default function StudentTab({ profile }: Props) {
                   <tbody>
                     {filtered.map((s) => (
                       <tr key={s.studentId}>
+                        <td className="check-col">
+                          <input
+                            type="checkbox"
+                            checked={selected.includes(s.studentId)}
+                            onChange={() => toggleOne(s.studentId)}
+                            aria-label={`選取 ${s.name}`}
+                          />
+                        </td>
                         <td className="mono">{s.studentId}</td>
                         <td>
                           <strong>{s.name}</strong>
@@ -271,7 +420,21 @@ export default function StudentTab({ profile }: Props) {
                         <td>{s.group}</td>
                         <td>{s.role}</td>
                         <td className="ta-right">
-                          <button className="btn tiny ghost danger" onClick={() => handleDelete(s)}>
+                          <button className="btn tiny" onClick={() => setEditing({ ...s })}>
+                            編輯
+                          </button>
+                          <button
+                            className="btn tiny ghost danger"
+                            onClick={async () => {
+                              if (!window.confirm(`刪除「${s.name}」的名單與補課進度？`)) return;
+                              try {
+                                await deleteStudent(s.region, s.studentId);
+                                reload();
+                              } catch (e) {
+                                setError('刪除失敗：' + (e instanceof Error ? e.message : String(e)));
+                              }
+                            }}
+                          >
                             刪除
                           </button>
                         </td>
