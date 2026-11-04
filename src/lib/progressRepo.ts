@@ -1,4 +1,4 @@
-import { collection, doc, getDocs, setDoc } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, setDoc } from 'firebase/firestore';
 import { db } from './firebase';
 import { saveLocal } from './progress';
 import type { Course, CourseProgress, Student } from '../types';
@@ -35,6 +35,29 @@ export async function saveProgressFor(
 export interface StudentRecord {
   student: Student;
   progress: Record<string, CourseProgress>;
+}
+
+/** 讀取多位學員在單一課程的進度（同組進度用） */
+export async function loadCourseProgresses(
+  region: string,
+  studentIds: string[],
+  courseId: string
+): Promise<Record<string, CourseProgress>> {
+  const out: Record<string, CourseProgress> = {};
+  const chunk = 6;
+  for (let i = 0; i < studentIds.length; i += chunk) {
+    await Promise.all(
+      studentIds.slice(i, i + chunk).map(async (id) => {
+        try {
+          const snap = await getDoc(doc(progressCol(region, id), courseId));
+          if (snap.exists()) out[id] = { ...(snap.data() as CourseProgress), courseId };
+        } catch {
+          /* 單筆失敗不影響其他人 */
+        }
+      })
+    );
+  }
+  return out;
 }
 
 /** 匯出報表用：逐一讀取該區學員的進度（不開放 collection-group 查詢，避免整庫被撈） */

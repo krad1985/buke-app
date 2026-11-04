@@ -36,6 +36,8 @@ export interface Segment {
 
 export interface Course {
   courseId: string;
+  /** 所屬系列；空字串表示未分類（只有總管理員看得到） */
+  seriesId: string;
   title: string;
   description: string;
   teacher?: string;
@@ -63,15 +65,19 @@ export interface Student {
   phone?: string;
   /** 母班行政組織 */
   classroom: string;
-  /** 大組-小組 */
-  group: string;
+  /** 大組 */
+  groupLarge: string;
+  /** 小組 */
+  groupSmall: string;
   /** 身份別：學員／輔導員… */
   role: string;
   region: string;
+  /** 可觀看的系列（可跨系列） */
+  seriesIds: string[];
   updatedAt: number;
 }
 
-export type AdminRole = 'course' | 'region';
+export type AdminRole = 'super' | 'series' | 'region' | 'classroom';
 
 /** 管理員（doc ID = 帳號） */
 export interface AdminProfile {
@@ -79,9 +85,25 @@ export interface AdminProfile {
   name: string;
   role: AdminRole;
   region: string;
+  /** 教室窗口所屬教室 */
+  classroom: string;
+  /** 系列管理員可管理的系列 */
+  seriesIds: string[];
   enabled: boolean;
   /** 明文密碼：防君子模式，前端比對用 */
   pass: string;
+}
+
+/** 系列課程 */
+export interface Series {
+  seriesId: string;
+  name: string;
+  sortOrder: number;
+}
+
+export interface AppSettings {
+  /** 未登入（訪客）是否可查看課程 */
+  allowGuestView: boolean;
 }
 
 export interface CourseProgress {

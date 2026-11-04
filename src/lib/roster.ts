@@ -1,4 +1,13 @@
-import { collection, deleteDoc, doc, getDoc, getDocs, setDoc, writeBatch } from 'firebase/firestore';
+import {
+  arrayUnion,
+  collection,
+  deleteDoc,
+  doc,
+  getDoc,
+  getDocs,
+  setDoc,
+  writeBatch,
+} from 'firebase/firestore';
 import { db } from './firebase';
 import type { Student } from '../types';
 
@@ -53,13 +62,22 @@ export async function findStudentByLogin(input: string): Promise<Student | null>
   if (!region) return null;
   const snap = await getDoc(studentDoc(region, studentId));
   if (!snap.exists()) return null;
-  return { ...(snap.data() as Student), studentId: snap.id, region };
+  return normalizeStudent({ ...(snap.data() as Student), studentId: snap.id, region });
+}
+
+function normalizeStudent(s: Student): Student {
+  return {
+    ...s,
+    groupLarge: s.groupLarge ?? '',
+    groupSmall: s.groupSmall ?? '',
+    seriesIds: Array.isArray(s.seriesIds) ? s.seriesIds : [],
+  };
 }
 
 export async function listStudentsInRegion(region: string): Promise<Student[]> {
   const snap = await getDocs(collection(db, 'regions', region, 'students'));
   return snap.docs
-    .map((d) => ({ ...(d.data() as Student), studentId: d.id, region }))
+    .map((d) => normalizeStudent({ ...(d.data() as Student), studentId: d.id, region }))
     .sort((a, b) => a.studentId.localeCompare(b.studentId));
 }
 
@@ -74,14 +92,6 @@ export async function saveStudent(student: Student, previousPhone?: string): Pro
   const newPhone = normalizePhone(student.phone ?? '');
   if (oldPhone && oldPhone !== newPhone) {
     await deleteDoc(indexDoc(oldPhone)).catch(() => undefined);
-  }
-}
-
-/** 批次刪除（同時清掉進度與登入索引） */
-export async function deleteStudents(region: string, studentIds: string[]): Promise<void> {
-  const chunk = 4;
-  for (let i = 0; i < studentIds.length; i += chunk) {
-    await Promise.all(studentIds.slice(i, i + chunk).map((id) => deleteStudent(region, id)));
   }
 }
 
@@ -111,6 +121,14 @@ export async function deleteStudent(region: string, studentId: string): Promise<
   if (phone) await deleteDoc(indexDoc(phone)).catch(() => undefined);
 }
 
+/** 批次刪除（同時清掉進度與登入索引） */
+export async function deleteStudents(region: string, studentIds: string[]): Promise<void> {
+  const chunk = 4;
+  for (let i = 0; i < studentIds.length; i += chunk) {
+    await Promise.all(studentIds.slice(i, i + chunk).map((id) => deleteStudent(region, id)));
+  }
+}
+
 /* ---------------- 名單解析 ---------------- */
 
 export interface RosterRow {
@@ -118,24 +136,12 @@ export interface RosterRow {
   name: string;
   phone: string;
   classroom: string;
-  group: string;
+  groupLarge: string;
+  groupSmall: string;
   role: string;
 }
 
-type ColumnKey = keyof RosterRow | 'groupLarge' | 'groupSmall';
-
-interface XlsxApi {
-  read: (
-    data: ArrayBuffer,
-    opts: { type: 'array' }
-  ) => { SheetNames: string[]; Sheets: Record<string, unknown> };
-  utils: {
-    sheet_to_json: (
-      ws: unknown,
-      opts: { header: 1; raw: false; defval: string }
-    ) => unknown[][];
-  };
-}
+type ColumnKey = keyof RosterRow;
 
 const HEADER_MAP: Record<string, ColumnKey> = {
   學員代碼: 'studentId',
@@ -161,6 +167,16 @@ const HEADER_MAP: Record<string, ColumnKey> = {
   身份: 'role',
   身分: 'role',
 };
+
+interface XlsxApi {
+  read: (
+    data: ArrayBuffer,
+    opts: { type: 'array' }
+  ) => { SheetNames: string[]; Sheets: Record<string, unknown> };
+  utils: {
+    sheet_to_json: (ws: unknown, opts: { header: 1; raw: false; defval: string }) => unknown[][];
+  };
+}
 
 /** 從二維陣列（Excel 工作表）解析名單；自動找表頭列 */
 export function parseRosterMatrix(matrix: string[][]): { rows: RosterRow[]; errors: string[] } {
@@ -208,26 +224,23 @@ export function parseRosterMatrix(matrix: string[][]): { rows: RosterRow[]; erro
     }
 
     const rawPhone = pick('phone');
-    // 表頭沒對到（或欄位空白）時，掃描整列找手機樣式，避免多一欄就讀不到
+    // 表頭沒對到（或欄位空白）時，掃描整列找手機樣式
     const fallbackPhone =
       rawPhone ||
-      cells
-        .map((c) => c.trim())
-        .find((c) => /^[\s'’"`]*0\d{8,9}$/.test(c)) ||
+      cells.map((c) => c.trim()).find((c) => /^[\s'’"`]*0\d{8,9}$/.test(c)) ||
       '';
     const phone = normalizePhone(fallbackPhone);
     if (fallbackPhone && !isValidPhone(phone)) {
       errors.push(`第 ${i + 1} 列（${name}）：手機「${fallbackPhone}」格式不對，已略過手機欄位`);
     }
 
-    const big = pick('groupLarge');
-    const small = pick('groupSmall');
     rows.push({
       studentId,
       name,
       phone: isValidPhone(phone) ? phone : '',
       classroom: pick('classroom'),
-      group: big && small ? `${big}-${small}` : big || small,
+      groupLarge: pick('groupLarge'),
+      groupSmall: pick('groupSmall'),
       role: pick('role'),
     });
   }
@@ -282,7 +295,18 @@ export interface ImportResult {
   duplicates: string[];
 }
 
-export async function importRoster(region: string, rows: RosterRow[]): Promise<ImportResult> {
+export interface ImportOptions {
+  /** 指定系列（會被加入學員的 seriesIds，不覆蓋既有系列） */
+  seriesId?: string;
+  /** 教室窗口匯入時鎖定教室 */
+  classroom?: string;
+}
+
+export async function importRoster(
+  region: string,
+  rows: RosterRow[],
+  options: ImportOptions = {}
+): Promise<ImportResult> {
   const byId = new Map<string, RosterRow>();
   const duplicates: string[] = [];
   for (const row of rows) {
@@ -296,16 +320,22 @@ export async function importRoster(region: string, rows: RosterRow[]): Promise<I
     const batch = writeBatch(db);
     for (const [studentId, row] of entries.slice(i, i + 200)) {
       const index = { region, name: row.name, studentId };
-      batch.set(studentDoc(region, studentId), {
-        studentId,
-        name: row.name,
-        phone: row.phone || '',
-        region,
-        classroom: row.classroom,
-        group: row.group,
-        role: row.role,
-        updatedAt: Date.now(),
-      });
+      batch.set(
+        studentDoc(region, studentId),
+        {
+          studentId,
+          name: row.name,
+          phone: row.phone || '',
+          region,
+          classroom: options.classroom || row.classroom,
+          groupLarge: row.groupLarge,
+          groupSmall: row.groupSmall,
+          role: row.role,
+          updatedAt: Date.now(),
+          ...(options.seriesId ? { seriesIds: arrayUnion(options.seriesId) } : {}),
+        },
+        { merge: true }
+      );
       batch.set(indexDoc(studentId), index, { merge: true });
       if (row.phone) batch.set(indexDoc(row.phone), index, { merge: true });
       created += 1;

@@ -2,10 +2,11 @@ import { useCallback, useMemo, useState } from 'react';
 import SegmentCard from './SegmentCard';
 import TimecodePicker from './TimecodePicker';
 import { saveCourse } from '../../lib/coursesRepo';
-import type { Course, Segment } from '../../types';
+import type { Course, Segment, Series } from '../../types';
 
 interface Props {
   course: Course;
+  series: Series[];
   onSaved: () => void;
   onCancel: () => void;
 }
@@ -38,7 +39,7 @@ function validate(c: Course): string[] {
   return errs;
 }
 
-export default function CourseEditor({ course, onSaved, onCancel }: Props) {
+export default function CourseEditor({ course, series, onSaved, onCancel }: Props) {
   const [draft, setDraft] = useState<Course>(() => JSON.parse(JSON.stringify(course)) as Course);
   const [now, setNow] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -192,6 +193,21 @@ export default function CourseEditor({ course, onSaved, onCancel }: Props) {
                   onChange={(e) => patch({ youtubeVideoId: e.target.value.trim() })}
                   placeholder="例如 dQw4w9WgXcQ"
                 />
+              </label>
+              <label className="field">
+                <span>系列</span>
+                <select
+                  className="select"
+                  value={draft.seriesId}
+                  onChange={(e) => patch({ seriesId: e.target.value })}
+                >
+                  <option value="">未分類（所有學員可見）</option>
+                  {series.map((s) => (
+                    <option key={s.seriesId} value={s.seriesId}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
               </label>
               <label className="field">
                 <span>排序（小的在前）</span>

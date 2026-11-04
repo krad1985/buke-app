@@ -1,4 +1,4 @@
-import type { Course } from '../types';
+﻿import type { Course } from '../types';
 
 /**
  * 示範資料。串接 Firebase 後整個檔案會被換成 Firestore 讀取。
@@ -8,6 +8,7 @@ import type { Course } from '../types';
 export const mockCourses: Course[] = [
   {
     courseId: 'demo-01',
+    seriesId: '',
     title: '示範課程：影片分段與檢核',
     description:
       '用來驗證「看完一段 → 答題 → 答對才解鎖下一段」的流程。題目是示範用的，正式上線前請在後台替換。',
@@ -126,6 +127,7 @@ export const mockCourses: Course[] = [
   },
   {
     courseId: 'demo-02',
+    seriesId: '',
     title: '示範課程：多課程清單（第二門）',
     description: '用來確認課程列表可以容納多門課，且進度各自獨立儲存。',
     youtubeVideoId: 'dQw4w9WgXcQ',

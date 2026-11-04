@@ -11,13 +11,18 @@ import {
 } from '../../lib/roster';
 import { getPrefRegion, setPrefRegion } from '../../lib/adminPrefs';
 import { REGIONS } from '../../lib/regions';
-import type { AdminProfile, Student } from '../../types';
+import type { AdminProfile, Series, Student } from '../../types';
 import type { RosterRow } from '../../lib/roster';
 
 const TEMPLATE_HEADER = ['學員代碼', '學員姓名', '母班行政組織', '大組', '小組', '身份別', '手機'];
 
-export default function StudentTab({ profile }: { profile: AdminProfile }) {
-  const [region, setRegion] = useState(profile.role === 'region' ? profile.region : getPrefRegion());
+export default function StudentTab({ profile, series }: { profile: AdminProfile; series: Series[] }) {
+  const fixedRegion =
+    profile.role === 'region' || profile.role === 'classroom' ? profile.region : '';
+  const fixedClassroom = profile.role === 'classroom' ? profile.classroom : '';
+
+  const [region, setRegion] = useState(fixedRegion || getPrefRegion());
+  const [seriesId, setSeriesId] = useState('');
   const [students, setStudents] = useState<Student[] | null>(null);
   const [fileName, setFileName] = useState('');
   const [text, setText] = useState('');
@@ -42,7 +47,7 @@ export default function StudentTab({ profile }: { profile: AdminProfile }) {
       })
       .catch((e: unknown) => {
         setStudents([]);
-        setError('讀取名單失敗：' + (e instanceof Error ? e.message : String(e)));
+        setError('讀取名單失敗：' + (e as Error).message);
       });
   }, [region]);
 
@@ -65,7 +70,7 @@ export default function StudentTab({ profile }: { profile: AdminProfile }) {
       setParsed(await parseRosterFile(file));
     } catch (e) {
       setParsed(null);
-      setError('讀取檔案失敗：' + (e instanceof Error ? e.message : String(e)));
+      setError('讀取檔案失敗：' + (e as Error).message);
     }
   };
 
@@ -85,42 +90,47 @@ export default function StudentTab({ profile }: { profile: AdminProfile }) {
     setError(null);
     setMessage(null);
     try {
-      const result = await importRoster(region, parsed.rows);
+      const result = await importRoster(region, parsed.rows, {
+        seriesId: seriesId || undefined,
+        classroom: fixedClassroom || undefined,
+      });
       const parts = [`已匯入 ${result.created} 筆到「${region}」`];
+      if (seriesId) parts.push(`已加入系列「${series.find((s) => s.seriesId === seriesId)?.name ?? ''}」`);
       if (result.duplicates.length) parts.push(`檔案內重複代碼：${result.duplicates.join('、')}`);
       setMessage(parts.join('｜'));
       resetParsed();
       reload();
     } catch (e) {
-      setError('匯入失敗：' + (e instanceof Error ? e.message : String(e)));
+      setError('匯入失敗：' + (e as Error).message);
     } finally {
       setBusy(false);
     }
   };
 
+  const filterByClassroom = useCallback(
+    (list: Student[]) => (fixedClassroom ? list.filter((s) => s.classroom === fixedClassroom) : list),
+    [fixedClassroom]
+  );
+
   const filtered = useMemo(() => {
     const q = search.trim();
-    return (students ?? []).filter((s) => {
+    return filterByClassroom(students ?? []).filter((s) => {
       if (!q) return true;
       return (
         s.name.includes(q) ||
         s.studentId.includes(q) ||
         (s.phone ?? '').includes(q) ||
         s.classroom.includes(q) ||
-        s.group.includes(q)
+        s.groupSmall.includes(q)
       );
     });
-  }, [students, search]);
+  }, [students, search, filterByClassroom]);
 
   const allChecked = filtered.length > 0 && filtered.every((s) => selected.includes(s.studentId));
 
-  const toggleAll = () => {
-    setSelected(allChecked ? [] : filtered.map((s) => s.studentId));
-  };
-
-  const toggleOne = (id: string) => {
+  const toggleAll = () => setSelected(allChecked ? [] : filtered.map((s) => s.studentId));
+  const toggleOne = (id: string) =>
     setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
-  };
 
   const handleBatchDelete = async () => {
     if (selected.length === 0) return;
@@ -130,7 +140,7 @@ export default function StudentTab({ profile }: { profile: AdminProfile }) {
       await deleteStudents(region, selected);
       reload();
     } catch (e) {
-      setError('刪除失敗：' + (e instanceof Error ? e.message : String(e)));
+      setError('刪除失敗：' + (e as Error).message);
     } finally {
       setBusy(false);
     }
@@ -142,11 +152,11 @@ export default function StudentTab({ profile }: { profile: AdminProfile }) {
     setError(null);
     try {
       const original = students?.find((s) => s.studentId === editing.studentId);
-      await saveStudent(editing, original?.phone);
+      await saveStudent({ ...editing, seriesIds: editing.seriesIds ?? [] }, original?.phone);
       setEditing(null);
       reload();
     } catch (e) {
-      setError('儲存失敗：' + (e instanceof Error ? e.message : String(e)));
+      setError('儲存失敗：' + (e as Error).message);
     } finally {
       setBusy(false);
     }
@@ -156,9 +166,7 @@ export default function StudentTab({ profile }: { profile: AdminProfile }) {
     <div className="admin-home">
       <div className="admin-toolbar">
         <h2>學員名單</h2>
-        {profile.role === 'region' ? (
-          <span className="hint">{region}</span>
-        ) : (
+        {profile.role === 'super' ? (
           <label className="field inline">
             <span>區域</span>
             <select
@@ -178,6 +186,11 @@ export default function StudentTab({ profile }: { profile: AdminProfile }) {
               ))}
             </select>
           </label>
+        ) : (
+          <span className="hint">
+            {region}
+            {fixedClassroom ? `／${fixedClassroom}` : ''}
+          </span>
         )}
       </div>
 
@@ -205,6 +218,25 @@ export default function StudentTab({ profile }: { profile: AdminProfile }) {
                 </label>
               </div>
             </div>
+
+            {series.length > 0 && (
+              <label className="field inline" style={{ marginBottom: 10 }}>
+                <span>加入系列</span>
+                <select
+                  className="select"
+                  style={{ width: 180 }}
+                  value={seriesId}
+                  onChange={(e) => setSeriesId(e.target.value)}
+                >
+                  <option value="">不指定</option>
+                  {series.map((s) => (
+                    <option key={s.seriesId} value={s.seriesId}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
 
             <div
               className={`dropzone ${fileName ? 'has-file' : ''}`}
@@ -247,7 +279,8 @@ export default function StudentTab({ profile }: { profile: AdminProfile }) {
                         <th>姓名</th>
                         <th>手機</th>
                         <th>母班</th>
-                        <th>組別</th>
+                        <th>大組</th>
+                        <th>小組</th>
                         <th>身份</th>
                       </tr>
                     </thead>
@@ -258,7 +291,8 @@ export default function StudentTab({ profile }: { profile: AdminProfile }) {
                           <td>{r.name}</td>
                           <td className="mono">{r.phone || '—'}</td>
                           <td>{r.classroom}</td>
-                          <td>{r.group}</td>
+                          <td>{r.groupLarge}</td>
+                          <td>{r.groupSmall}</td>
                           <td>{r.role}</td>
                         </tr>
                       ))}
@@ -327,7 +361,6 @@ export default function StudentTab({ profile }: { profile: AdminProfile }) {
                     className="input mono"
                     value={editing.phone ?? ''}
                     onChange={(e) => setEditing({ ...editing, phone: e.target.value })}
-                    placeholder="0912345678"
                   />
                 </label>
                 <label className="field">
@@ -339,11 +372,19 @@ export default function StudentTab({ profile }: { profile: AdminProfile }) {
                   />
                 </label>
                 <label className="field">
-                  <span>組別</span>
+                  <span>大組</span>
                   <input
                     className="input"
-                    value={editing.group}
-                    onChange={(e) => setEditing({ ...editing, group: e.target.value })}
+                    value={editing.groupLarge}
+                    onChange={(e) => setEditing({ ...editing, groupLarge: e.target.value })}
+                  />
+                </label>
+                <label className="field">
+                  <span>小組</span>
+                  <input
+                    className="input"
+                    value={editing.groupSmall}
+                    onChange={(e) => setEditing({ ...editing, groupSmall: e.target.value })}
                   />
                 </label>
                 <label className="field">
@@ -354,6 +395,30 @@ export default function StudentTab({ profile }: { profile: AdminProfile }) {
                     onChange={(e) => setEditing({ ...editing, role: e.target.value })}
                   />
                 </label>
+                {series.length > 0 && (
+                  <div className="field span2">
+                    <span>可見系列</span>
+                    <div className="checkline span2">
+                      {series.map((s) => (
+                        <label key={s.seriesId} className="checkline">
+                          <input
+                            type="checkbox"
+                            checked={editing.seriesIds.includes(s.seriesId)}
+                            onChange={() =>
+                              setEditing({
+                                ...editing,
+                                seriesIds: editing.seriesIds.includes(s.seriesId)
+                                  ? editing.seriesIds.filter((x) => x !== s.seriesId)
+                                  : [...editing.seriesIds, s.seriesId],
+                              })
+                            }
+                          />
+                          <span>{s.name}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -361,7 +426,7 @@ export default function StudentTab({ profile }: { profile: AdminProfile }) {
           <div className="panel" style={{ marginTop: 16 }}>
             <div className="section-head">
               <h3>
-                {region}（{students?.length ?? 0} 人）
+                {region}（{filtered.length} 人）
               </h3>
               <div className="row-gap">
                 {selected.length > 0 && (
@@ -395,7 +460,8 @@ export default function StudentTab({ profile }: { profile: AdminProfile }) {
                       <th>姓名</th>
                       <th>手機</th>
                       <th>母班</th>
-                      <th>組別</th>
+                      <th>大組</th>
+                      <th>小組</th>
                       <th>身份</th>
                       <th />
                     </tr>
@@ -417,7 +483,8 @@ export default function StudentTab({ profile }: { profile: AdminProfile }) {
                         </td>
                         <td className="mono">{s.phone || ''}</td>
                         <td>{s.classroom}</td>
-                        <td>{s.group}</td>
+                        <td>{s.groupLarge}</td>
+                        <td>{s.groupSmall}</td>
                         <td>{s.role}</td>
                         <td className="ta-right">
                           <button className="btn tiny" onClick={() => setEditing({ ...s })}>
@@ -431,7 +498,7 @@ export default function StudentTab({ profile }: { profile: AdminProfile }) {
                                 await deleteStudent(s.region, s.studentId);
                                 reload();
                               } catch (e) {
-                                setError('刪除失敗：' + (e instanceof Error ? e.message : String(e)));
+                                setError('刪除失敗：' + (e as Error).message);
                               }
                             }}
                           >

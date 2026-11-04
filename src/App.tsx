@@ -8,7 +8,8 @@ import { withTimeout } from './lib/async';
 import { listAllCourses } from './lib/coursesRepo';
 import { emptyProgress, loadAllLocal, saveLocal } from './lib/progress';
 import { loadAllProgress, saveProgressFor } from './lib/progressRepo';
-import type { Course, CourseProgress, Student } from './types';
+import { loadSettings, DEFAULT_SETTINGS } from './lib/settings';
+import type { AppSettings, Course, CourseProgress, Student } from './types';
 
 type Route = { view: 'list' } | { view: 'course'; id: string } | { view: 'admin' };
 
@@ -38,6 +39,7 @@ export default function App() {
   const [courses, setCourses] = useState<Course[] | null>(null);
   const [progress, setProgress] = useState<Record<string, CourseProgress>>({});
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
 
   useEffect(() => {
     const onHash = () => setRoute(parseRoute());
@@ -65,6 +67,12 @@ export default function App() {
   }, [reloadCourses]);
 
   useEffect(() => {
+    loadSettings()
+      .then(setSettings)
+      .catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
     if (!student) {
       setProgress(loadAllLocal());
       return;
@@ -74,7 +82,12 @@ export default function App() {
       .catch(() => setProgress(loadAllLocal()));
   }, [student]);
 
-  const published = useMemo(() => (courses ?? []).filter((c) => c.isPublished), [courses]);
+  const published = useMemo(() => {
+    const list = (courses ?? []).filter((c) => c.isPublished);
+    if (!student) return list;
+    // 有系列設定的課程，只給該系列的學員看；未分類的維持公開
+    return list.filter((c) => !c.seriesId || student.seriesIds.includes(c.seriesId));
+  }, [courses, student]);
 
   const activeCourse = useMemo(
     () =>
@@ -119,7 +132,7 @@ export default function App() {
     setRoute({ view: 'list' });
   };
 
-  const needGate = route.view !== 'admin' && !student && !guest;
+  const needGate = route.view !== 'admin' && !student && (!guest || !settings.allowGuestView);
 
   return (
     <div className="app">
@@ -155,7 +168,11 @@ export default function App() {
         {route.view === 'admin' ? (
           <AdminApp />
         ) : needGate ? (
-          <StudentGate onBound={handleBound} onSkip={() => setGuest(true)} />
+          <StudentGate
+            onBound={handleBound}
+            onSkip={() => setGuest(true)}
+            allowGuest={settings.allowGuestView}
+          />
         ) : courses === null ? (
           <p className="hint">正在載入課程…</p>
         ) : route.view === 'course' ? (
@@ -166,6 +183,7 @@ export default function App() {
               initialProgress={progress[activeCourse.courseId] ?? emptyProgress(activeCourse.courseId)}
               onSaveProgress={handleSaveProgress}
               onExit={close}
+              student={student}
             />
           ) : (
             <div className="panel">

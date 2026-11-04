@@ -5,9 +5,10 @@ import type { Student } from '../types';
 interface Props {
   onBound: (student: Student) => void;
   onSkip: () => void;
+  allowGuest: boolean;
 }
 
-export default function StudentGate({ onBound, onSkip }: Props) {
+export default function StudentGate({ onBound, onSkip, allowGuest }: Props) {
   const [input, setInput] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -55,11 +56,13 @@ export default function StudentGate({ onBound, onSkip }: Props) {
             {busy ? '查詢中…' : '開始上課'}
           </button>
         </form>
-        <p className="gate-skip">
-          <button type="button" className="link-btn" onClick={onSkip}>
-            先看看課程
-          </button>
-        </p>
+        {allowGuest && (
+          <p className="gate-skip">
+            <button type="button" className="link-btn" onClick={onSkip}>
+              先看看課程
+            </button>
+          </p>
+        )}
       </div>
     </div>
   );

@@ -55,6 +55,7 @@ export function newCourseId(): string {
 export function emptyCourse(courseId: string): Course {
   return {
     courseId,
+    seriesId: '',
     title: '未命名課程',
     description: '',
     teacher: '',

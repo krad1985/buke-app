@@ -6,15 +6,15 @@ import { listStudentsInRegion } from '../../lib/roster';
 import { loadRegionRecords, type StudentRecord } from '../../lib/progressRepo';
 import { getPrefRegion, setPrefRegion } from '../../lib/adminPrefs';
 import { REGIONS } from '../../lib/regions';
-import type { Course } from '../../types';
-import type { AdminProfile } from '../../types';
+import type { AdminProfile, Course, Series } from '../../types';
 
 const fmtDate = (ts?: number) => (ts ? new Date(ts).toLocaleString('zh-TW', { hour12: false }) : '');
 
 interface Row {
   studentId: string;
   classroom: string;
-  group: string;
+  groupLarge: string;
+  groupSmall: string;
   role: string;
   name: string;
   cells: Record<string, string>;
@@ -23,8 +23,16 @@ interface Row {
   lastUpdated: number;
 }
 
-export default function RecordTab({ profile }: { profile: AdminProfile }) {
-  const [region, setRegion] = useState(profile.role === 'region' ? profile.region : getPrefRegion());
+interface Props {
+  profile: AdminProfile;
+  series: Series[];
+}
+
+export default function RecordTab({ profile }: Props) {
+  const fixedRegion =
+    profile.role === 'region' || profile.role === 'classroom' ? profile.region : '';
+  const fixedClassroom = profile.role === 'classroom' ? profile.classroom : '';
+  const [region, setRegion] = useState(fixedRegion || getPrefRegion());
   const [courses, setCourses] = useState<Course[]>([]);
   const [records, setRecords] = useState<StudentRecord[] | null>(null);
   const [onlyRecorded, setOnlyRecorded] = useState(false);
@@ -43,7 +51,10 @@ export default function RecordTab({ profile }: { profile: AdminProfile }) {
     setError(null);
     try {
       const students = await listStudentsInRegion(region);
-      const rows = await loadRegionRecords(region, students);
+      const scoped = fixedClassroom
+        ? students.filter((s) => s.classroom === fixedClassroom)
+        : students;
+      const rows = await loadRegionRecords(region, scoped);
       setRecords(rows);
     } catch (e) {
       setError('讀取記錄失敗：' + (e instanceof Error ? e.message : String(e)));
@@ -84,7 +95,8 @@ export default function RecordTab({ profile }: { profile: AdminProfile }) {
       return {
         studentId: rec.student.studentId,
         classroom: rec.student.classroom,
-        group: rec.student.group,
+        groupLarge: rec.student.groupLarge,
+        groupSmall: rec.student.groupSmall,
         role: rec.student.role,
         name: rec.student.name,
         cells,
@@ -99,12 +111,13 @@ export default function RecordTab({ profile }: { profile: AdminProfile }) {
   }, [records, courses, onlyRecorded]);
 
   const handleExport = () => {
-    const header = ['區域', '學員代碼', '母班', '組別', '身份', '姓名', ...courses.map((c) => c.title), '完課數', '已學習時數(分)', '最後更新'];
+    const header = ['區域', '學員代碼', '母班', '大組', '小組', '身份', '姓名', ...courses.map((c) => c.title), '完課數', '已學習時數(分)', '最後更新'];
     const body = rows.map((r) => [
       region,
       r.studentId,
       r.classroom,
-      r.group,
+      r.groupLarge,
+      r.groupSmall,
       r.role,
       r.name,
       ...courses.map((c) => r.cells[c.courseId] ?? ''),
@@ -187,7 +200,8 @@ export default function RecordTab({ profile }: { profile: AdminProfile }) {
                       <th>學員代碼</th>
                       <th>姓名</th>
                       <th>母班</th>
-                      <th>組別</th>
+                      <th>大組</th>
+                      <th>小組</th>
                       <th>身份</th>
                       {courses.map((c) => (
                         <th key={c.courseId} className="course-col" title={c.title}>
@@ -206,7 +220,8 @@ export default function RecordTab({ profile }: { profile: AdminProfile }) {
                           <strong>{r.name}</strong>
                         </td>
                         <td>{r.classroom}</td>
-                        <td>{r.group}</td>
+                        <td>{r.groupLarge}</td>
+                        <td>{r.groupSmall}</td>
                         <td>{r.role}</td>
                         {courses.map((c) => (
                           <td key={c.courseId} className="mark-cell">

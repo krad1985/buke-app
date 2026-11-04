@@ -2,7 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { fmtDuration, fmtTime, segmentSeconds } from '../lib/format';
 import { IconPause, IconPlay } from './Icons';
 import { loadYouTubeApi, type YTPlayer } from '../lib/youtube';
-import type { AnswerRecord, Course, CourseProgress, Segment } from '../types';
+import { listStudentsInRegion } from '../lib/roster';
+import { loadCourseProgresses } from '../lib/progressRepo';
+import type { AnswerRecord, Course, CourseProgress, Segment, Student } from '../types';
 import QuizPanel, { type QuizResult } from './QuizPanel';
 import SegmentList from './SegmentList';
 
@@ -13,6 +15,7 @@ interface Props {
   initialProgress: CourseProgress;
   onSaveProgress: (progress: CourseProgress) => void;
   onExit: () => void;
+  student?: Student | null;
 }
 
 const YT_ERRORS: Record<number, string> = {
@@ -23,7 +26,7 @@ const YT_ERRORS: Record<number, string> = {
   150: '這支影片的擁有者不允許嵌入播放。',
 };
 
-export default function LessonView({ course, initialProgress, onSaveProgress, onExit }: Props) {
+export default function LessonView({ course, initialProgress, onSaveProgress, onExit, student }: Props) {
   const segments = course.segments;
   const saved = initialProgress;
 
@@ -47,7 +50,12 @@ export default function LessonView({ course, initialProgress, onSaveProgress, on
   const [quizKey, setQuizKey] = useState(0);
   const [reviewIndex, setReviewIndex] = useState<number | null>(null);
   const [isFull, setIsFull] = useState(false);
+  const [pseudoFull, setPseudoFull] = useState(false);
   const [rate, setRate] = useState(1);
+  const [peersOpen, setPeersOpen] = useState(false);
+  const [peers, setPeers] = useState<{ name: string; me: boolean; passed: number; total: number }[] | null>(
+    null
+  );
 
   const hostRef = useRef<HTMLDivElement>(null);
   const boxRef = useRef<HTMLDivElement>(null);
@@ -207,14 +215,65 @@ export default function LessonView({ course, initialProgress, onSaveProgress, on
   };
 
   const toggleFullscreen = () => {
+    if (pseudoFull) {
+      setPseudoFull(false);
+      return;
+    }
     const el = boxRef.current;
     if (!el) return;
     if (document.fullscreenElement) {
       void document.exitFullscreen?.();
+      return;
+    }
+    // iOS Safari 不支援元素全螢幕，退回自訂全螢幕
+    if (typeof el.requestFullscreen === 'function') {
+      el.requestFullscreen()
+        .then(() => setIsFull(true))
+        .catch(() => setPseudoFull(true));
     } else {
-      void el.requestFullscreen?.({ navigationUI: 'hide' }).catch(() => undefined);
+      setPseudoFull(true);
     }
   };
+
+  const openPeers = async () => {
+    if (!student) return;
+    setPeersOpen((v) => !v);
+    if (peers) return;
+    try {
+      const list = await listStudentsInRegion(student.region);
+      const same = list.filter(
+        (s) =>
+          s.groupLarge === student.groupLarge &&
+          s.groupSmall === student.groupSmall &&
+          (s.groupLarge !== '' || s.groupSmall !== '')
+      );
+      const progress = await loadCourseProgresses(
+        student.region,
+        same.map((s) => s.studentId),
+        course.courseId
+      );
+      setPeers(
+        same
+          .map((s) => ({
+            name: s.name,
+            me: s.studentId === student.studentId,
+            passed: progress[s.studentId]?.passed.length ?? 0,
+            total: segments.length,
+          }))
+          .sort((a, b) => b.passed - a.passed || a.name.localeCompare(b.name))
+      );
+    } catch {
+      setPeers([]);
+    }
+  };
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && pseudoFull) setPseudoFull(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [pseudoFull]);
 
   useEffect(() => {
     const onFs = () => setIsFull(!!document.fullscreenElement);
@@ -359,11 +418,16 @@ export default function LessonView({ course, initialProgress, onSaveProgress, on
             {watchedSec > 0 && <>・已學習 {fmtDuration(watchedSec)}</>}
           </p>
         </div>
+        {student && (
+          <button className="btn tiny ghost" onClick={openPeers}>
+            {peersOpen ? '收起同組進度' : '同組進度'}
+          </button>
+        )}
       </div>
 
       <div className="lesson-grid">
         <div className="lesson-main">
-          <div className="player-box" ref={boxRef}>
+          <div className={`player-box ${pseudoFull ? 'is-fullscreen' : ''}`} ref={boxRef}>
             <div className="player-wrap">
               <div className="player-host" ref={hostRef} />
               <div
@@ -488,6 +552,42 @@ export default function LessonView({ course, initialProgress, onSaveProgress, on
               </div>
             )}
           </div>
+
+          {peersOpen && student && (
+            <div className="panel peers-panel">
+              <div className="section-head">
+                <h3>同組進度</h3>
+                <span className="hint">
+                  大組 {student.groupLarge || '—'}・小組 {student.groupSmall || '—'}
+                </span>
+              </div>
+              {!peers ? (
+                <p className="hint">讀取中…</p>
+              ) : peers.length === 0 ? (
+                <p className="hint">同組沒有其他學員。</p>
+              ) : (
+                <ul className="peers-list">
+                  {peers.map((p) => (
+                    <li key={p.name + p.passed} className={p.me ? 'me' : ''}>
+                      <span className="peers-name">
+                        {p.name}
+                        {p.me ? '（我）' : ''}
+                      </span>
+                      <span className="peers-bar">
+                        <span
+                          className="peers-fill"
+                          style={{ width: `${p.total ? (p.passed / p.total) * 100 : 0}%` }}
+                        />
+                      </span>
+                      <span className="mono">
+                        {p.passed}/{p.total}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
 
           {reviewIndex !== null && reviewSeg && (
             <div className="notice review">

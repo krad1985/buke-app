@@ -15,10 +15,22 @@ const SESSION_KEY = 'buke.admin.session.v1';
 
 const adminRef = (account: string) => doc(db, 'admins', account.trim().toLowerCase());
 
+function normalizeProfile(p: AdminProfile): AdminProfile {
+  // 舊資料的 role 是 'course'，一律視為總管理員
+  const role = (p.role as string) === 'course' ? 'super' : p.role;
+  return {
+    ...p,
+    role,
+    classroom: p.classroom ?? '',
+    seriesIds: Array.isArray(p.seriesIds) ? p.seriesIds : [],
+  };
+}
+
 export function loadSession(): AdminProfile | null {
   try {
     const raw = sessionStorage.getItem(SESSION_KEY);
-    return raw ? (JSON.parse(raw) as AdminProfile) : null;
+    if (!raw) return null;
+    return normalizeProfile(JSON.parse(raw) as AdminProfile);
   } catch {
     return null;
   }
@@ -48,8 +60,10 @@ export async function ensureDefaultAdmin(): Promise<void> {
   await setDoc(doc(db, 'admins', 'admin'), {
     account: 'admin',
     name: '系統管理員',
-    role: 'course' as AdminRole,
+    role: 'super' as AdminRole,
     region: '',
+    classroom: '',
+    seriesIds: [],
     enabled: true,
     pass: 'admin',
     updatedAt: Date.now(),
@@ -64,7 +78,7 @@ export async function loginAdmin(account: string, pass: string): Promise<AdminPr
   const data = snap.data() as AdminProfile;
   if (data.enabled === false) throw new Error('這個帳號已被停用，請聯繫課程管理員。');
   if (data.pass !== pass) throw new Error('密碼不正確。');
-  const profile: AdminProfile = { ...data, account: key };
+  const profile: AdminProfile = normalizeProfile({ ...data, account: key });
   saveSession(profile);
   return profile;
 }
@@ -72,7 +86,7 @@ export async function loginAdmin(account: string, pass: string): Promise<AdminPr
 export async function listAdmins(): Promise<AdminProfile[]> {
   const snap = await getDocs(collection(db, 'admins'));
   return snap.docs
-    .map((d) => ({ ...(d.data() as AdminProfile), account: d.id }))
+    .map((d) => normalizeProfile({ ...(d.data() as AdminProfile), account: d.id }))
     .sort((a, b) => a.role.localeCompare(b.role) || a.account.localeCompare(b.account));
 }
 
@@ -83,6 +97,8 @@ export interface NewAdminInput {
   name: string;
   role: AdminRole;
   region: string;
+  classroom: string;
+  seriesIds: string[];
   pass: string;
 }
 
@@ -92,8 +108,14 @@ export async function createAdmin(input: NewAdminInput): Promise<void> {
     throw new Error('帳號需為 3–20 個英數字（可用 . _ -），不能有中文或空白。');
   }
   if (!input.pass.trim()) throw new Error('請設定登入密碼。');
-  if (input.role === 'region' && !isRegionName(input.region)) {
-    throw new Error('區域管理員必須指定一個有效區域。');
+  if ((input.role === 'region' || input.role === 'classroom') && !isRegionName(input.region)) {
+    throw new Error('請指定一個有效區域。');
+  }
+  if (input.role === 'classroom' && !input.classroom.trim()) {
+    throw new Error('教室窗口必須指定教室。');
+  }
+  if (input.role === 'series' && input.seriesIds.length === 0) {
+    throw new Error('系列管理員至少要指定一個系列。');
   }
   const snap = await getDoc(adminRef(account));
   if (snap.exists()) throw new Error('這個帳號已經有人使用。');
@@ -102,7 +124,9 @@ export async function createAdmin(input: NewAdminInput): Promise<void> {
     account,
     name: input.name.trim() || account,
     role: input.role,
-    region: input.role === 'region' ? input.region : '',
+    region: input.role === 'region' || input.role === 'classroom' ? input.region : '',
+    classroom: input.role === 'classroom' ? input.classroom.trim() : '',
+    seriesIds: input.role === 'series' ? input.seriesIds : [],
     enabled: true,
     pass: input.pass,
     updatedAt: Date.now(),
