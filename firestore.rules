@@ -1,18 +1,59 @@
 rules_version = '2';
 
 // ============================================================
-// 防君子模式：所有資料可讀可寫。
+// 防君子模式。
 //
-// 本系統沒有伺服器、也沒有 Firebase Auth，管理權限只在畫面上用
-// 密碼與角色區分，資料庫無法分辨誰是誰。與其寫一套看起來嚴格
-// 但擋不住的規則，這裡直接開放，並用備份與角色畫面降低誤用。
+// 本系統沒有伺服器、也沒有 Firebase Auth，所以：
+//   1. 所有寫入都開放 —— 能開網站的人都能用 devtools 改資料。
+//   2. 唯一還留著的限制是 phones（登入索引）不能整批列舉，
+//      知道完整代碼或手機才查得到一筆。
 //
-// 這版是「全開一條規則」，之後新增集合（series、config…）不需要
-// 再改規則。
+// 這份是「逐集合」版本：新增集合就要在這裡加一條。
+// 若改成 match /{document=**} { allow read, write: if true; } 也行，
+// 但會連 phones 的不可列舉一起開放，兩者實際差異很小（名單本來
+// 就能透過 regions/{region}/students 列出）。
+//
+// 要真正的防護，只能把寫入移到伺服器（Vercel Function / Cloud
+// Functions + Admin SDK），屆時把這裡改成 allow write: if false;
 // ============================================================
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /{document=**} {
+
+    match /courses/{courseId} {
+      allow read, write: if true;
+    }
+
+    // 系列課程
+    match /series/{seriesId} {
+      allow read, write: if true;
+    }
+
+    // 系統設定（訪客瀏覽開關）
+    match /config/{docId} {
+      allow read, write: if true;
+    }
+
+    // 管理員帳號與密碼
+    match /admins/{account} {
+      allow read, write: if true;
+    }
+
+    // 登入索引：只能單筆取，不能列舉
+    match /phones/{key} {
+      allow get: if true;
+      allow list: if false;
+      allow write: if true;
+    }
+
+    match /regions/{region} {
+      allow read, write: if true;
+    }
+
+    match /regions/{region}/students/{studentId} {
+      allow read, write: if true;
+    }
+
+    match /regions/{region}/students/{studentId}/progress/{courseId} {
       allow read, write: if true;
     }
   }
