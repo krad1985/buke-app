@@ -79,19 +79,30 @@ export interface Student {
 
 export type AdminRole = 'super' | 'series' | 'region' | 'classroom';
 
+/** 單一權限（一個帳號可以有多個） */
+export interface AdminGrant {
+  id: string;
+  role: 'series' | 'region' | 'classroom';
+  region: string;
+  classroom: string;
+  seriesIds: string[];
+}
+
 /** 管理員（doc ID = 帳號） */
 export interface AdminProfile {
   account: string;
   name: string;
+  pass: string;
+  enabled: boolean;
+  /** 總管理員：全權，不需要 grants */
+  superAdmin: boolean;
+  /** 可切換的身分 */
+  grants: AdminGrant[];
+  /** 以下由「目前身分」推導，供畫面使用，不寫回資料庫 */
   role: AdminRole;
   region: string;
-  /** 教室窗口所屬教室 */
   classroom: string;
-  /** 系列管理員可管理的系列 */
   seriesIds: string[];
-  enabled: boolean;
-  /** 明文密碼：防君子模式，前端比對用 */
-  pass: string;
 }
 
 /** 系列課程 */

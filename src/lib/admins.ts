@@ -1,45 +1,98 @@
 import { collection, deleteDoc, doc, getDoc, getDocs, setDoc, updateDoc } from 'firebase/firestore';
 import { db } from './firebase';
 import { isRegionName } from './regions';
-import type { AdminProfile, AdminRole } from '../types';
+import type { AdminGrant, AdminProfile } from '../types';
 
 /**
  * 管理員資料存在 admins/{帳號}。
  *
- * 密碼是明文、且前端比對得到 —— 這是刻意的「防君子」設計：
- * 內部使用、方便優先。任何能開網站的人都能繞過前端畫面直接寫資料庫，
- * 因此這裡的分層只防「操作失誤」，不防「有心人」。
+ * 一個帳號可以有多個「權限」（grants），登入後切換身分；
+ * 文件只存 superAdmin 與 grants，role/region/classroom/seriesIds
+ * 是讀取時依目前身分推導出來的，不寫回資料庫。
  */
-
-const SESSION_KEY = 'buke.admin.session.v1';
+const SESSION_KEY = 'buke.admin.session.v2';
 
 const adminRef = (account: string) => doc(db, 'admins', account.trim().toLowerCase());
 
-function normalizeProfile(p: AdminProfile): AdminProfile {
-  // 舊資料的 role 是 'course'，一律視為總管理員
-  const role = (p.role as string) === 'course' ? 'super' : p.role;
+const rid = () => Math.random().toString(36).slice(2, 8);
+
+export function applyActive(profile: AdminProfile, activeGrantId: string | null): AdminProfile {
+  if (profile.superAdmin && (activeGrantId === '__super' || !profile.grants.length)) {
+    return { ...profile, role: 'super', region: '', classroom: '', seriesIds: [] };
+  }
+  const grant =
+    profile.grants.find((g) => g.id === activeGrantId) ?? profile.grants[0] ?? null;
+  if (!grant) {
+    return { ...profile, role: profile.superAdmin ? 'super' : 'classroom', region: '', classroom: '', seriesIds: [] };
+  }
   return {
-    ...p,
-    role,
-    classroom: p.classroom ?? '',
-    seriesIds: Array.isArray(p.seriesIds) ? p.seriesIds : [],
+    ...profile,
+    role: grant.role,
+    region: grant.region,
+    classroom: grant.classroom,
+    seriesIds: grant.seriesIds,
   };
 }
 
-export function loadSession(): AdminProfile | null {
+/** 舊資料（單一 role）轉成 grants */
+export function normalizeProfile(raw: Record<string, unknown>, activeGrantId: string | null = null): AdminProfile {
+  const legacyRole = raw.role as string | undefined;
+  const superAdmin = raw.superAdmin === true || legacyRole === 'super' || legacyRole === 'course';
+
+  let grants: AdminGrant[] = Array.isArray(raw.grants)
+    ? (raw.grants as AdminGrant[]).map((g) => ({ ...g, id: g.id ?? rid() }))
+    : [];
+
+  if (grants.length === 0 && legacyRole && legacyRole !== 'super' && legacyRole !== 'course') {
+    grants = [
+      {
+        id: rid(),
+        role: legacyRole as AdminGrant['role'],
+        region: (raw.region as string) ?? '',
+        classroom: (raw.classroom as string) ?? '',
+        seriesIds: Array.isArray(raw.seriesIds) ? (raw.seriesIds as string[]) : [],
+      },
+    ];
+  }
+
+  const base: AdminProfile = {
+    account: (raw.account as string) ?? '',
+    name: (raw.name as string) ?? '',
+    pass: (raw.pass as string) ?? '',
+    enabled: raw.enabled !== false,
+    superAdmin,
+    grants,
+    role: 'super',
+    region: '',
+    classroom: '',
+    seriesIds: [],
+  };
+  return applyActive(base, activeGrantId);
+}
+
+export function loadSessionState(): { profile: AdminProfile; activeGrantId: string | null } | null {
   try {
     const raw = sessionStorage.getItem(SESSION_KEY);
     if (!raw) return null;
-    return normalizeProfile(JSON.parse(raw) as AdminProfile);
+    const saved = JSON.parse(raw) as { profile: Record<string, unknown>; activeGrantId: string | null };
+    return { profile: normalizeProfile(saved.profile, saved.activeGrantId), activeGrantId: saved.activeGrantId };
   } catch {
     return null;
   }
 }
 
-export function saveSession(profile: AdminProfile): void {
+export function loadSession(): AdminProfile | null {
+  return loadSessionState()?.profile ?? null;
+}
+
+export function saveSession(profile: AdminProfile, activeGrantId: string | null): void {
   try {
-    // session 不保留密碼：只記登入狀態所需的身分欄位
-    sessionStorage.setItem(SESSION_KEY, JSON.stringify({ ...profile, pass: '' }));
+    const { role, region, classroom, seriesIds, ...rest } = profile;
+    void role;
+    void region;
+    void classroom;
+    void seriesIds;
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify({ profile: rest, activeGrantId }));
   } catch {
     /* 無痕模式 */
   }
@@ -60,10 +113,9 @@ export async function ensureDefaultAdmin(): Promise<void> {
   await setDoc(doc(db, 'admins', 'admin'), {
     account: 'admin',
     name: '系統管理員',
-    role: 'super' as AdminRole,
-    region: '',
-    classroom: '',
-    seriesIds: [],
+    role: 'super',
+    superAdmin: true,
+    grants: [],
     enabled: true,
     pass: 'admin',
     updatedAt: Date.now(),
@@ -75,19 +127,19 @@ export async function loginAdmin(account: string, pass: string): Promise<AdminPr
   if (!key) throw new Error('請輸入帳號。');
   const snap = await getDoc(adminRef(key));
   if (!snap.exists()) throw new Error('查不到這個帳號。');
-  const data = snap.data() as AdminProfile;
-  if (data.enabled === false) throw new Error('這個帳號已被停用，請聯繫課程管理員。');
-  if (data.pass !== pass) throw new Error('密碼不正確。');
-  const profile: AdminProfile = normalizeProfile({ ...data, account: key });
-  saveSession(profile);
+  const raw = snap.data() as Record<string, unknown>;
+  const profile = normalizeProfile({ ...raw, account: key }, null);
+  if (profile.enabled === false) throw new Error('這個帳號已被停用，請聯繫總管理員。');
+  if (profile.pass !== pass) throw new Error('密碼不正確。');
+  saveSession(profile, profile.superAdmin ? '__super' : null);
   return profile;
 }
 
 export async function listAdmins(): Promise<AdminProfile[]> {
   const snap = await getDocs(collection(db, 'admins'));
   return snap.docs
-    .map((d) => normalizeProfile({ ...(d.data() as AdminProfile), account: d.id }))
-    .sort((a, b) => a.role.localeCompare(b.role) || a.account.localeCompare(b.account));
+    .map((d) => normalizeProfile({ ...(d.data() as Record<string, unknown>), account: d.id }))
+    .sort((a, b) => a.account.localeCompare(b.account));
 }
 
 const ACCOUNT_RE = /^[a-z0-9][a-z0-9._-]{2,19}$/;
@@ -95,11 +147,21 @@ const ACCOUNT_RE = /^[a-z0-9][a-z0-9._-]{2,19}$/;
 export interface NewAdminInput {
   account: string;
   name: string;
-  role: AdminRole;
-  region: string;
-  classroom: string;
-  seriesIds: string[];
   pass: string;
+  superAdmin: boolean;
+  grants: Omit<AdminGrant, 'id'>[];
+}
+
+function validateGrant(grant: Omit<AdminGrant, 'id'>): void {
+  if (grant.role === 'series' && grant.seriesIds.length === 0) {
+    throw new Error('系列管理員至少要指定一個系列。');
+  }
+  if ((grant.role === 'region' || grant.role === 'classroom') && !isRegionName(grant.region)) {
+    throw new Error('請指定一個有效區域。');
+  }
+  if (grant.role === 'classroom' && !grant.classroom.trim()) {
+    throw new Error('教室窗口必須指定教室。');
+  }
 }
 
 export async function createAdmin(input: NewAdminInput): Promise<void> {
@@ -108,29 +170,43 @@ export async function createAdmin(input: NewAdminInput): Promise<void> {
     throw new Error('帳號需為 3–20 個英數字（可用 . _ -），不能有中文或空白。');
   }
   if (!input.pass.trim()) throw new Error('請設定登入密碼。');
-  if ((input.role === 'region' || input.role === 'classroom') && !isRegionName(input.region)) {
-    throw new Error('請指定一個有效區域。');
-  }
-  if (input.role === 'classroom' && !input.classroom.trim()) {
-    throw new Error('教室窗口必須指定教室。');
-  }
-  if (input.role === 'series' && input.seriesIds.length === 0) {
-    throw new Error('系列管理員至少要指定一個系列。');
-  }
+  if (!input.superAdmin && input.grants.length === 0) throw new Error('至少要給一個權限。');
+  for (const g of input.grants) validateGrant(g);
+
   const snap = await getDoc(adminRef(account));
   if (snap.exists()) throw new Error('這個帳號已經有人使用。');
 
   await setDoc(adminRef(account), {
     account,
     name: input.name.trim() || account,
-    role: input.role,
-    region: input.role === 'region' || input.role === 'classroom' ? input.region : '',
-    classroom: input.role === 'classroom' ? input.classroom.trim() : '',
-    seriesIds: input.role === 'series' ? input.seriesIds : [],
+    superAdmin: input.superAdmin,
+    grants: input.grants.map((g) => ({ ...g, id: rid() })),
     enabled: true,
     pass: input.pass,
     updatedAt: Date.now(),
   });
+}
+
+export async function addGrant(account: string, grant: Omit<AdminGrant, 'id'>): Promise<void> {
+  validateGrant(grant);
+  const snap = await getDoc(adminRef(account));
+  if (!snap.exists()) throw new Error('查不到這個帳號。');
+  const profile = normalizeProfile({ ...(snap.data() as Record<string, unknown>), account });
+  await updateDoc(adminRef(account), {
+    grants: [...profile.grants, { ...grant, id: rid() }],
+    updatedAt: Date.now(),
+  });
+}
+
+export async function removeGrant(account: string, grantId: string): Promise<void> {
+  const snap = await getDoc(adminRef(account));
+  if (!snap.exists()) throw new Error('查不到這個帳號。');
+  const profile = normalizeProfile({ ...(snap.data() as Record<string, unknown>), account });
+  const grants = profile.grants.filter((g) => g.id !== grantId);
+  if (grants.length === 0 && !profile.superAdmin) {
+    throw new Error('至少要保留一個權限；不用了就停用帳號。');
+  }
+  await updateDoc(adminRef(account), { grants, updatedAt: Date.now() });
 }
 
 export async function setAdminEnabled(account: string, enabled: boolean): Promise<void> {
@@ -146,7 +222,6 @@ export async function removeAdmin(account: string): Promise<void> {
   await deleteDoc(adminRef(account));
 }
 
-/** 修改自己的密碼：先比對舊密碼 */
 export async function changeMyPassword(
   account: string,
   oldPass: string,
@@ -154,11 +229,24 @@ export async function changeMyPassword(
 ): Promise<AdminProfile> {
   const snap = await getDoc(adminRef(account));
   if (!snap.exists()) throw new Error('查不到這個帳號。');
-  const data = snap.data() as AdminProfile;
-  if (data.pass !== oldPass) throw new Error('目前密碼不正確。');
+  const profile = normalizeProfile({ ...(snap.data() as Record<string, unknown>), account });
+  if (profile.pass !== oldPass) throw new Error('目前密碼不正確。');
   if (!newPass.trim()) throw new Error('新密碼不可空白。');
   await updateDoc(adminRef(account), { pass: newPass, updatedAt: Date.now() });
-  const updated: AdminProfile = { ...data, account, pass: newPass };
-  saveSession(updated);
-  return updated;
+  return { ...profile, pass: newPass };
+}
+
+export function roleLabel(p: AdminProfile): string {
+  switch (p.role) {
+    case 'super':
+      return '總管理員';
+    case 'series':
+      return '系列管理員';
+    case 'region':
+      return `區域窗口（${p.region}）`;
+    case 'classroom':
+      return `教室窗口（${p.region}／${p.classroom}）`;
+    default:
+      return '';
+  }
 }

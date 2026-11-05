@@ -1576,3 +1576,39 @@ textarea.input {
   font-weight: 600;
 }
 
+.switcher {
+  width: auto;
+  min-width: 150px;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+.grant-list {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.grant-editor {
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  background: #fcfbf8;
+}
+
+.grant-rows {
+  list-style: none;
+  margin: 8px 0 14px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.grant-rows li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
