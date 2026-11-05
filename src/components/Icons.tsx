@@ -52,8 +52,7 @@ export function IconLock({ size = 13 }: IconProps) {
   );
 }
 
-export function IconBook({ size = 22 }: IconProps) {
-  return (
+export function IconBook({ size = 22 }: IconProps) {  return (
     <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
       <path
         d="M4 5.2c2.6-1.1 5.3-1.1 8 0 2.7-1.1 5.4-1.1 8 0v13.6c-2.6-1.1-5.3-1.1-8 0-2.7-1.1-5.4-1.1-8 0V5.2z"
@@ -63,6 +62,17 @@ export function IconBook({ size = 22 }: IconProps) {
         strokeLinejoin="round"
       />
       <path d="M12 5.4v13.2" fill="none" stroke="currentColor" strokeWidth="1.1" />
+    </svg>
+  );
+}
+
+export function IconUsers({ size = 15 }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 18 18" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round">
+      <circle cx="7" cy="6" r="2.4" />
+      <path d="M2.8 14.2c0-2.3 1.9-3.7 4.2-3.7s4.2 1.4 4.2 3.7" />
+      <path d="M12.6 4.2a2.2 2.2 0 0 1 0 4.2" />
+      <path d="M14 10.8c1.3.4 2.2 1.5 2.2 3.2" />
     </svg>
   );
 }

@@ -1671,3 +1671,28 @@ textarea.input {
   font-weight: 600;
   margin-right: 4px;
 }
+.peer-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--accent);
+  border-color: #cfdcd4;
+  background: var(--accent-soft);
+  flex: none;
+}
+
+.peer-btn:hover:not(:disabled) {
+  background: #e4ece7;
+  border-color: #b9ccc2;
+}
+
+.peer-btn:disabled {
+  color: var(--muted);
+  background: #f3f1ea;
+  border-color: var(--line);
+  opacity: 1;
+}
+
+.peers-list li.me .peers-name {
+  color: var(--accent);
+}

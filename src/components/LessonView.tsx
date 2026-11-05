@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { fmtDuration, fmtTime, segmentSeconds } from '../lib/format';
-import { IconPause, IconPlay } from './Icons';
+import { IconPause, IconPlay, IconUsers } from './Icons';
 import { loadYouTubeApi, type YTPlayer } from '../lib/youtube';
 import { listStudentsInRegion } from '../lib/roster';
 import { loadCourseProgresses } from '../lib/progressRepo';
@@ -53,6 +53,7 @@ export default function LessonView({ course, initialProgress, onSaveProgress, on
   const [pseudoFull, setPseudoFull] = useState(false);
   const [rate, setRate] = useState(1);
   const [peersOpen, setPeersOpen] = useState(false);
+  const [peerCount, setPeerCount] = useState<number | null>(null);
   const [textSize, setTextSize] = useState<'s' | 'm' | 'l'>(() => {
     const v = localStorage.getItem('buke.textSize');
     return v === 's' || v === 'l' ? v : 'm';
@@ -63,6 +64,7 @@ export default function LessonView({ course, initialProgress, onSaveProgress, on
   );
 
   const hostRef = useRef<HTMLDivElement>(null);
+  const peersPanelRef = useRef<HTMLDivElement>(null);
   const boxRef = useRef<HTMLDivElement>(null);
   const rateRef = useRef(1);
   const playerRef = useRef<YTPlayer | null>(null);
@@ -255,10 +257,36 @@ export default function LessonView({ course, initialProgress, onSaveProgress, on
     }
   };
 
+  useEffect(() => {
+    if (!student) {
+      setPeerCount(null);
+      return;
+    }
+    let alive = true;
+    listStudentsInRegion(student.region)
+      .then((list) => {
+        if (!alive) return;
+        const same = list.filter(
+          (s) =>
+            s.groupLarge === student.groupLarge &&
+            s.groupSmall === student.groupSmall &&
+            (s.groupLarge !== '' || s.groupSmall !== '')
+        );
+        setPeerCount(Math.max(same.length - 1, 0));
+      })
+      .catch(() => {
+        if (alive) setPeerCount(0);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [student]);
+
   const openPeers = async () => {
     if (!student) return;
-    setPeersOpen((v) => !v);
-    if (peers) return;
+    setPeersOpen(true);
+    setPeers(null);
+    peersPanelRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     try {
       const list = await listStudentsInRegion(student.region);
       const same = list.filter(
@@ -446,8 +474,20 @@ export default function LessonView({ course, initialProgress, onSaveProgress, on
           </p>
         </div>
         {student && (
-          <button className="btn tiny ghost" onClick={openPeers}>
-            {peersOpen ? '收起同組進度' : '同組進度'}
+          <button
+            className="btn small peer-btn"
+            onClick={openPeers}
+            disabled={peerCount === 0}
+            title={peerCount === 0 ? '同組目前沒有其他學員' : undefined}
+          >
+            <IconUsers />
+            {peersOpen
+              ? '收起同組進度'
+              : peerCount === null
+                ? '同組進度'
+                : peerCount === 0
+                  ? '同組無其他學員'
+                  : `同組進度（${peerCount + 1} 人）`}
           </button>
         )}
         <div className="textsize" role="group" aria-label="文字大小">
@@ -600,12 +640,17 @@ export default function LessonView({ course, initialProgress, onSaveProgress, on
           </div>
 
           {peersOpen && student && (
-            <div className="panel peers-panel">
+            <div className="panel peers-panel" ref={peersPanelRef}>
               <div className="section-head">
                 <h3>同組進度</h3>
-                <span className="hint">
-                  大組 {student.groupLarge || '—'}・小組 {student.groupSmall || '—'}
-                </span>
+                <div className="row-gap">
+                  <span className="hint">
+                    大組 {student.groupLarge || '—'}・小組 {student.groupSmall || '—'}
+                  </span>
+                  <button className="btn tiny" onClick={() => setPeersOpen(false)}>
+                    關閉
+                  </button>
+                </div>
               </div>
               {!peers ? (
                 <p className="hint">讀取中…</p>
