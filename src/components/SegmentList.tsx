@@ -7,10 +7,19 @@ interface Props {
   activeIndex: number;
   passed: number[];
   allowRewatch: boolean;
+  /** 自由選看：所有段落都可點 */
+  freeMode: boolean;
   onReplay: (index: number) => void;
 }
 
-export default function SegmentList({ segments, activeIndex, passed, allowRewatch, onReplay }: Props) {
+export default function SegmentList({
+  segments,
+  activeIndex,
+  passed,
+  allowRewatch,
+  freeMode,
+  onReplay,
+}: Props) {
   return (
     <aside className="panel segment-panel">
       <div className="panel-head">
@@ -20,8 +29,10 @@ export default function SegmentList({ segments, activeIndex, passed, allowRewatc
         {segments.map((seg) => {
           const isPassed = passed.includes(seg.segIndex);
           const isActive = seg.segIndex === activeIndex;
-          const isLocked = !isPassed && !isActive;
-          const canReplay = isPassed && allowRewatch && !isActive;
+          const isLocked = !freeMode && !isPassed && !isActive;
+          const canOpen = freeMode
+            ? !isActive
+            : isPassed && allowRewatch && !isActive;
           return (
             <li
               key={seg.segIndex}
@@ -45,9 +56,9 @@ export default function SegmentList({ segments, activeIndex, passed, allowRewatc
                   </p>
                 </div>
               </div>
-              {canReplay && (
+              {canOpen && (
                 <button type="button" className="btn tiny" onClick={() => onReplay(seg.segIndex)}>
-                  重看
+                  {freeMode ? '看這段' : '重看'}
                 </button>
               )}
             </li>

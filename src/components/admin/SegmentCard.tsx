@@ -7,6 +7,8 @@ interface Props {
   segment: Segment;
   index: number;
   total: number;
+  /** 上一段結束時間，用來顯示「跳過」或「重疊」 */
+  previousEnd: number | null;
   now: number;
   videoDuration: number;
   onChange: (seg: Segment) => void;
@@ -31,6 +33,7 @@ export default function SegmentCard({
   segment,
   index,
   total,
+  previousEnd,
   now,
   videoDuration,
   onChange,
@@ -88,6 +91,15 @@ export default function SegmentCard({
           </button>
         </label>
         <span className="seg-len">長度 {fmtTime(Math.max(segment.endSec - segment.startSec, 0))}</span>
+        {previousEnd !== null && (
+          <span className="seg-len">
+            {segment.startSec > previousEnd
+              ? `跳過 ${fmtTime(segment.startSec - previousEnd)}`
+              : segment.startSec < previousEnd
+                ? `與上一段重疊 ${fmtTime(previousEnd - segment.startSec)}`
+                : '與上一段銜接'}
+          </span>
+        )}
       </div>
 
       {!longEnough && (

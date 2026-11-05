@@ -53,6 +53,11 @@ export default function LessonView({ course, initialProgress, onSaveProgress, on
   const [pseudoFull, setPseudoFull] = useState(false);
   const [rate, setRate] = useState(1);
   const [peersOpen, setPeersOpen] = useState(false);
+  const [textSize, setTextSize] = useState<'s' | 'm' | 'l'>(() => {
+    const v = localStorage.getItem('buke.textSize');
+    return v === 's' || v === 'l' ? v : 'm';
+  });
+  const free = course.freeNavigation === true;
   const [peers, setPeers] = useState<{ name: string; me: boolean; passed: number; total: number }[] | null>(
     null
   );
@@ -180,6 +185,16 @@ export default function LessonView({ course, initialProgress, onSaveProgress, on
 
       const seg = guardSeg;
       if (!seg) return;
+
+      if (free) {
+        // 自由選看：不擋、不跳段，看到段落結尾就記為已看過
+        const end = effEnd(seg);
+        if (t >= end - 0.3 && !passed.includes(seg.segIndex)) {
+          setPassed((prev) => (prev.includes(seg.segIndex) ? prev : [...prev, seg.segIndex]));
+        }
+        return;
+      }
+
       const end = effEnd(seg);
 
       if (t >= end - 0.3) {
@@ -199,7 +214,12 @@ export default function LessonView({ course, initialProgress, onSaveProgress, on
       }
     }, 250);
     return () => window.clearInterval(id);
-  }, [phase, ready, guardSeg, effEnd, reviewIndex, activeIndex, segments]);
+  }, [phase, ready, guardSeg, effEnd, reviewIndex, activeIndex, segments, free, passed]);
+
+  useEffect(() => {
+    if (!free) return;
+    setWatchedSec(segmentSeconds(segments, passed));
+  }, [free, passed, segments]);
 
   /* ---------- 操作 ---------- */
   const seekTo = (sec: number) => {
@@ -370,6 +390,13 @@ export default function LessonView({ course, initialProgress, onSaveProgress, on
     const seg = segments[index];
     if (!seg || activeIndex >= segments.length) return;
     setResult(null);
+    if (free) {
+      setActiveIndex(index);
+      seekTo(seg.startSec);
+      playerRef.current?.playVideo();
+      setPhase('playing');
+      return;
+    }
     setReviewIndex(index);
     seekTo(seg.startSec);
     playerRef.current?.playVideo();
@@ -406,7 +433,7 @@ export default function LessonView({ course, initialProgress, onSaveProgress, on
   const totalDone = passed.length;
 
   return (
-    <div className="lesson">
+    <div className="lesson" data-textsize={textSize}>
       <div className="lesson-head">
         <button className="btn ghost small" onClick={onExit}>
           ← 課程列表
@@ -423,6 +450,20 @@ export default function LessonView({ course, initialProgress, onSaveProgress, on
             {peersOpen ? '收起同組進度' : '同組進度'}
           </button>
         )}
+        <div className="textsize" role="group" aria-label="文字大小">
+          {(['s', 'm', 'l'] as const).map((v) => (
+            <button
+              key={v}
+              className={`ts-btn ${textSize === v ? 'active' : ''}`}
+              onClick={() => {
+                setTextSize(v);
+                localStorage.setItem('buke.textSize', v);
+              }}
+            >
+              {v === 's' ? '小' : v === 'm' ? '中' : '大'}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="lesson-grid">
@@ -491,18 +532,23 @@ export default function LessonView({ course, initialProgress, onSaveProgress, on
                 <input
                   className="seek"
                   type="range"
-                  min={segStart}
-                  max={segEnd || 1}
+                  min={free ? 0 : segStart}
+                  max={free ? duration || 1 : segEnd || 1}
                   step={0.1}
-                  value={Math.min(Math.max(currentTime, segStart), segEnd || 1)}
+                  value={
+                    free
+                      ? Math.min(currentTime, duration || 1)
+                      : Math.min(Math.max(currentTime, segStart), segEnd || 1)
+                  }
                   onChange={(e) => seekTo(Number(e.target.value))}
                   disabled={!ready || phase !== 'playing'}
-                  aria-label="段落內進度"
+                  aria-label="播放進度"
                 />
 
                 <span className="time">
-                  {fmtTime(Math.max(currentTime - segStart, 0))} /{' '}
-                  {fmtTime(Math.max(segEnd - segStart, 0))}
+                  {free
+                    ? `${fmtTime(currentTime)} / ${fmtTime(duration)}`
+                    : `${fmtTime(Math.max(currentTime - segStart, 0))} / ${fmtTime(Math.max(segEnd - segStart, 0))}`}
                 </span>
 
                 <select
@@ -624,6 +670,7 @@ export default function LessonView({ course, initialProgress, onSaveProgress, on
           activeIndex={activeIndex}
           passed={passed}
           allowRewatch={course.allowRewatch && phase !== 'finished'}
+          freeMode={free}
           onReplay={handleReplay}
         />
       </div>

@@ -28,7 +28,7 @@ interface Props {
   series: Series[];
 }
 
-export default function RecordTab({ profile }: Props) {
+export default function RecordTab({ profile, series }: Props) {
   const fixedRegion =
     profile.role === 'region' || profile.role === 'classroom' ? profile.region : '';
   const fixedClassroom = profile.role === 'classroom' ? profile.classroom : '';
@@ -67,6 +67,11 @@ export default function RecordTab({ profile }: Props) {
   useEffect(() => {
     setRecords(null);
   }, [region]);
+
+  const codes = useMemo(
+    () => courses.map((_, i) => `C${String(i + 1).padStart(2, '0')}`),
+    [courses]
+  );
 
   const rows = useMemo<Row[]>(() => {
     if (!records) return [];
@@ -110,8 +115,42 @@ export default function RecordTab({ profile }: Props) {
     return filtered.sort((a, b) => a.studentId.localeCompare(b.studentId) || a.name.localeCompare(b.name));
   }, [records, courses, onlyRecorded]);
 
+  const handleExportDetail = () => {
+    const header = [
+      '區域', '學員代碼', '姓名', '母班', '大組', '小組', '身份',
+      '系列', '課程', '狀態', '已通過段數', '總段數', '已學習時數(分)', '最後更新',
+    ];
+    const seriesName = (id: string) => series.find((s) => s.seriesId === id)?.name ?? '';
+    const body: (string | number)[][] = [];
+    for (const rec of records ?? []) {
+      for (const course of courses) {
+        const p = rec.progress[course.courseId];
+        const passed = p?.passed.length ?? 0;
+        const total = course.segments.length;
+        const sec = p?.watchedSec ?? (p ? segmentSeconds(course.segments, p.passed) : 0);
+        body.push([
+          region,
+          rec.student.studentId,
+          rec.student.name,
+          rec.student.classroom,
+          rec.student.groupLarge,
+          rec.student.groupSmall,
+          rec.student.role,
+          seriesName(course.seriesId ?? ''),
+          course.title,
+          total > 0 && passed >= total ? '完課' : passed > 0 ? '進行中' : '未開始',
+          passed,
+          total,
+          Math.round(sec / 60),
+          fmtDate(p?.updatedAt),
+        ]);
+      }
+    }
+    downloadCsv(`學習明細_${region}_${new Date().toISOString().slice(0, 10)}.csv`, [header, ...body]);
+  };
+
   const handleExport = () => {
-    const header = ['區域', '學員代碼', '母班', '大組', '小組', '身份', '姓名', ...courses.map((c) => c.title), '完課數', '已學習時數(分)', '最後更新'];
+    const header = ['區域', '學員代碼', '母班', '大組', '小組', '身份', '姓名', ...codes, '完課數', '已學習時數(分)', '最後更新'];
     const body = rows.map((r) => [
       region,
       r.studentId,
@@ -125,7 +164,8 @@ export default function RecordTab({ profile }: Props) {
       r.minutes,
       fmtDate(r.lastUpdated),
     ]);
-    downloadCsv(`學習記錄_${region}_${new Date().toISOString().slice(0, 10)}.csv`, [header, ...body]);
+    const legend = [[''], [''], ['代號對照'], ...courses.map((c, i) => [codes[i], c.title])];
+    downloadCsv(`學習記錄_${region}_${new Date().toISOString().slice(0, 10)}.csv`, [header, ...body, ...legend]);
   };
 
   return (
@@ -181,7 +221,10 @@ export default function RecordTab({ profile }: Props) {
               </label>
             </div>
             <button className="btn" onClick={handleExport} disabled={rows.length === 0}>
-              匯出 CSV
+              匯出總表
+            </button>
+            <button className="btn" onClick={handleExportDetail} disabled={!records || records.length === 0}>
+              匯出明細
             </button>
           </div>
 
@@ -203,9 +246,9 @@ export default function RecordTab({ profile }: Props) {
                       <th>大組</th>
                       <th>小組</th>
                       <th>身份</th>
-                      {courses.map((c) => (
+                      {courses.map((c, i) => (
                         <th key={c.courseId} className="course-col" title={c.title}>
-                          {c.title}
+                          {codes[i]}
                         </th>
                       ))}
                       <th>完課數</th>
@@ -235,7 +278,16 @@ export default function RecordTab({ profile }: Props) {
                   </tbody>
                 </table>
               </div>
-              {rows.length > 300 && <p className="hint">畫面只顯示前 300 筆，匯出 CSV 會包含全部。</p>}
+              {courses.length > 0 && (
+                <p className="legend">
+                  {courses.map((c, i) => (
+                    <span key={c.courseId}>
+                      <b>{codes[i]}</b> {c.title}
+                    </span>
+                  ))}
+                </p>
+              )}
+              {rows.length > 300 && <p className="hint">畫面只顯示前 300 筆，匯出會包含全部。</p>}
             </>
           )}
         </div>

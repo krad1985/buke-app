@@ -47,6 +47,8 @@ export interface Course {
   sortOrder: number;
   /** 是否允許重看已通過的段落 */
   allowRewatch: boolean;
+  /** 自由選看：不需答題解鎖，任何段落都能直接點開 */
+  freeNavigation?: boolean;
   segments: Segment[];
 }
 

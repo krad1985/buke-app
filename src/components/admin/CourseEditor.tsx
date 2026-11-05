@@ -235,6 +235,14 @@ export default function CourseEditor({ course, series, onSaved, onCancel }: Prop
                   />
                   <span>允許重看已通過的段落</span>
                 </label>
+                <label className="checkline">
+                  <input
+                    type="checkbox"
+                    checked={draft.freeNavigation === true}
+                    onChange={(e) => patch({ freeNavigation: e.target.checked })}
+                  />
+                  <span>自由選看（不需答題解鎖）</span>
+                </label>
               </div>
             </div>
             <p className="hint">影片需為「公開」或「不公開」。</p>
@@ -254,6 +262,7 @@ export default function CourseEditor({ course, series, onSaved, onCancel }: Prop
                   segment={seg}
                   index={i}
                   total={draft.segments.length}
+                  previousEnd={i > 0 ? draft.segments[i - 1].endSec : null}
                   now={now}
                   videoDuration={duration}
                   onChange={(s) => updateSegment(i, s)}
