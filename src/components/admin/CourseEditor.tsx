@@ -239,6 +239,11 @@ export default function CourseEditor({ course, series, onSaved, onCancel }: Prop
                   />
                 </label>
               )}
+              {(draft.videoProvider ?? 'youtube') === 'vimeo' && (
+                <p className="hint span2">
+                  Vimeo 影片的隱私要設為「任何知道連結的人」，或把本站網域加入允許清單，否則只會顯示無法播放。
+                </p>
+              )}
               <label className="field">
                 <span>系列</span>
                 <select

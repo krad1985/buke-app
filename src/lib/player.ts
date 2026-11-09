@@ -174,7 +174,11 @@ async function createVimeoPlayer(opts: Options): Promise<PlayerHandle> {
   player.on('play', () => opts.onStateChange());
   player.on('pause', () => opts.onStateChange());
   player.on('ended', () => opts.onStateChange());
-  player.on('error', () => opts.onError('Vimeo 影片無法播放（可能不允許在此網域嵌入）。'));
+  player.on('error', () =>
+    opts.onError(
+      'Vimeo 無法播放：影片可能設為「僅限特定網域嵌入」。請管理者把隱私改成「任何知道連結的人」，或把本網域加入允許清單。'
+    )
+  );
 
   try {
     await player.ready();
@@ -185,7 +189,9 @@ async function createVimeoPlayer(opts: Options): Promise<PlayerHandle> {
     void player.pause().catch(() => undefined);
     opts.onReady(Number.isFinite(cachedDuration) ? cachedDuration : 0);
   } catch {
-    opts.onError('Vimeo 影片載入失敗，請確認影片隱私設定允許嵌入此網域。');
+    opts.onError(
+      'Vimeo 無法播放：影片可能設為「僅限特定網域嵌入」。請管理者把隱私改成「任何知道連結的人」，或把本網域加入允許清單。'
+    );
   }
 
   return {
