@@ -26,7 +26,7 @@ function validate(c: Course): string[] {
   c.segments.forEach((seg, i) => {
     const n = i + 1;
     if (seg.endSec <= seg.startSec) errs.push(`第 ${n} 段：結束時間要晚於開始時間`);
-    if (seg.questions.length === 0) errs.push(`第 ${n} 段：至少要有一題`);
+    if (!c.freeNavigation && seg.questions.length === 0) errs.push(`第 ${n} 段：至少要有一題`);
     seg.questions.forEach((q, qi) => {
       const tag = `第 ${n} 段第 ${qi + 1} 題`;
       if (!q.prompt.trim()) errs.push(`${tag}：題目不可空白`);
@@ -305,6 +305,9 @@ export default function CourseEditor({ course, series, onSaved, onCancel }: Prop
                 ＋ 新增段落
               </button>
             </div>
+            {draft.freeNavigation === true && (
+              <p className="hint">自由選看模式不需要題目；之後若關閉，才需要為每個段落補題。</p>
+            )}
             <div className="seg-list">
               {draft.segments.map((seg, i) => (
                 <SegmentCard
