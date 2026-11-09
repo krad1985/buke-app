@@ -181,7 +181,10 @@ export default function CourseTab({ profile, series }: Props) {
                   <tr key={c.courseId}>
                     <td>
                       <strong>{c.title}</strong>
-                      <div className="hint mono">{c.youtubeVideoId || '未設定影片'}</div>
+                      <div className="hint mono">
+                        {c.videoProvider === 'vimeo' ? 'Vimeo' : 'YouTube'}・
+                        {c.videoId || c.youtubeVideoId || '未設定影片'}
+                      </div>
                     </td>
                     <td>{seriesName(c.seriesId)}</td>
                     <td>{c.segments.length}</td>

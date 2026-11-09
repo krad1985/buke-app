@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from 'react';
 import SegmentCard from './SegmentCard';
 import TimecodePicker from './TimecodePicker';
 import { saveCourse } from '../../lib/coursesRepo';
+import { courseVideo, parseVideoUrl } from '../../lib/video';
 import type { Course, Segment, Series } from '../../types';
 
 interface Props {
@@ -14,7 +15,12 @@ interface Props {
 function validate(c: Course): string[] {
   const errs: string[] = [];
   if (!c.title.trim()) errs.push('請填課程名稱');
-  if (!c.youtubeVideoId.trim()) errs.push('請填 YouTube 影片 ID');
+  if (!(c.videoId ?? '').trim() && !(c.youtubeVideoId ?? '').trim()) {
+    errs.push('請填影片 ID');
+  }
+  if (c.videoProvider === 'vimeo' && !/^\d+$/.test((c.videoId ?? '').trim())) {
+    errs.push('Vimeo 影片 ID 應為數字');
+  }
   if (c.segments.length === 0) errs.push('至少要有一個段落');
 
   c.segments.forEach((seg, i) => {
@@ -186,14 +192,53 @@ export default function CourseEditor({ course, series, onSaved, onCancel }: Prop
                 />
               </label>
               <label className="field">
-                <span>YouTube 影片 ID</span>
+                <span>影片來源</span>
+                <select
+                  className="select"
+                  value={draft.videoProvider ?? 'youtube'}
+                  onChange={(e) => patch({ videoProvider: e.target.value as 'youtube' | 'vimeo' })}
+                >
+                  <option value="youtube">YouTube</option>
+                  <option value="vimeo">Vimeo</option>
+                </select>
+              </label>
+              <label className="field">
+                <span>影片連結或 ID</span>
                 <input
                   className="input mono"
-                  value={draft.youtubeVideoId}
-                  onChange={(e) => patch({ youtubeVideoId: e.target.value.trim() })}
-                  placeholder="例如 dQw4w9WgXcQ"
+                  value={draft.videoId ?? draft.youtubeVideoId ?? ''}
+                  onChange={(e) => {
+                    const raw = e.target.value;
+                    const parsed = parseVideoUrl(raw);
+                    if (parsed) {
+                      patch({
+                        videoId: parsed.id,
+                        videoProvider: parsed.provider,
+                        videoHash: parsed.hash ?? '',
+                        youtubeVideoId: parsed.provider === 'youtube' ? parsed.id : '',
+                      });
+                    } else {
+                      patch({ videoId: raw.trim() });
+                    }
+                  }}
+                  placeholder={
+                    (draft.videoProvider ?? 'youtube') === 'vimeo'
+                      ? 'vimeo.com/1222868790/7a467b68ce'
+                      : 'dQw4w9WgXcQ 或完整網址'
+                  }
                 />
               </label>
+              {(draft.videoProvider ?? 'youtube') === 'vimeo' && (
+                <label className="field">
+                  <span>Vimeo 私密 hash（不公開連結的後半段，可留空）</span>
+                  <input
+                    className="input mono"
+                    value={draft.videoHash ?? ''}
+                    onChange={(e) => patch({ videoHash: e.target.value.trim() })}
+                    placeholder="7a467b68ce"
+                  />
+                </label>
+              )}
               <label className="field">
                 <span>系列</span>
                 <select
@@ -279,7 +324,7 @@ export default function CourseEditor({ course, series, onSaved, onCancel }: Prop
         <div className="editor-col side">
           <div className="panel sticky">
             <h2>抓時間碼</h2>
-            <TimecodePicker videoId={draft.youtubeVideoId} onTick={handleTick} />
+            <TimecodePicker video={courseVideo(draft)} onTick={handleTick} />
           </div>
         </div>
       </div>

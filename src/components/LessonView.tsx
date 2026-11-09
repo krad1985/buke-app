@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { fmtDuration, fmtTime, segmentSeconds } from '../lib/format';
 import { IconPause, IconPlay, IconUsers } from './Icons';
-import { loadYouTubeApi, type YTPlayer } from '../lib/youtube';
+import { createPlayer, type PlayerHandle } from '../lib/player';
+import { courseVideo } from '../lib/video';
 import { listStudentsInRegion } from '../lib/roster';
 import { loadCourseProgresses } from '../lib/progressRepo';
 import type { AnswerRecord, Course, CourseProgress, Segment, Student } from '../types';
@@ -18,17 +19,10 @@ interface Props {
   student?: Student | null;
 }
 
-const YT_ERRORS: Record<number, string> = {
-  2: '影片 ID 格式不正確。',
-  5: '瀏覽器無法播放這支影片。',
-  100: '影片不存在，或設為「私人」而無法嵌入。',
-  101: '這支影片的擁有者不允許嵌入播放。',
-  150: '這支影片的擁有者不允許嵌入播放。',
-};
-
 export default function LessonView({ course, initialProgress, onSaveProgress, onExit, student }: Props) {
   const segments = course.segments;
   const saved = initialProgress;
+  const video = useMemo(() => courseVideo(course), [course]);
 
   const [phase, setPhase] = useState<Phase>(() =>
     segments.length > 0 && saved.passed.length >= segments.length ? 'finished' : 'intro'
@@ -67,7 +61,7 @@ export default function LessonView({ course, initialProgress, onSaveProgress, on
   const peersPanelRef = useRef<HTMLDivElement>(null);
   const boxRef = useRef<HTMLDivElement>(null);
   const rateRef = useRef(1);
-  const playerRef = useRef<YTPlayer | null>(null);
+  const playerRef = useRef<PlayerHandle | null>(null);
   const resumeAtRef = useRef<number | null>(
     saved.lastPositionSec > 0 ? saved.lastPositionSec : null
   );
@@ -92,65 +86,50 @@ export default function LessonView({ course, initialProgress, onSaveProgress, on
     el.className = 'player-host-inner';
     host.appendChild(el);
 
-    loadYouTubeApi()
-      .then((YT) => {
+    const from = resumeAtRef.current;
+    const start = segments[saved.activeIndex]?.startSec ?? 0;
+
+    void createPlayer({
+      container: el,
+      video: video,
+      startAt: Math.max(start, 0),
+      rate: rateRef.current,
+      onReady: (d) => {
         if (disposed) return;
-        playerRef.current = new YT.Player(el, {
-          videoId: course.youtubeVideoId,
-          playerVars: {
-            controls: 0,
-            disablekb: 1,
-            fs: 0,
-            rel: 0,
-            modestbranding: 1,
-            playsinline: 1,
-            iv_load_policy: 3,
-            enablejsapi: 1,
-            origin: window.location.origin,
-          },
-          events: {
-            onReady: (e: { target: YTPlayer }) => {
-              if (disposed) return;
-              const d = e.target.getDuration();
-              setDuration(Number.isFinite(d) ? d : 0);
-              const from = resumeAtRef.current;
-              const start = segments[saved.activeIndex]?.startSec ?? 0;
-              const target =
-                from !== null && from > start ? Math.min(from, (d || from) - 1) : start;
-              e.target.seekTo(Math.max(target, 0), true);
-              e.target.setPlaybackRate(rateRef.current);
-              e.target.pauseVideo();
-              setReady(true);
-            },
-            onStateChange: (e: { data: number }) => {
-              setPlaying(e.data === 1);
-              if (e.data === 0) {
-                // 影片自然結束：若還在進行中的段落，直接進入檢核
-                setPhase((p) => (p === 'playing' ? 'quiz' : p));
-              }
-            },
-            onError: (e: { data: number }) => {
-              setLoadError(YT_ERRORS[e.data] ?? '影片載入失敗，請確認影片是否允許嵌入。');
-            },
-          },
-        });
+        setDuration(d);
+        // 續看：若上次位置在目前段落之內就從那裡開始
+        if (from !== null && from > start) {
+          const target = Math.min(from, (d || from) - 1);
+          playerRef.current?.seek(Math.max(target, 0));
+        }
+        setReady(true);
+      },
+      onStateChange: () => {
+        const t = playerRef.current?.getCurrentTime() ?? 0;
+        setCurrentTime(t);
+        setPlaying(true);
+      },
+      onError: (message) => setLoadError(message),
+    })
+      .then((handle) => {
+        if (disposed) {
+          handle.destroy();
+          return;
+        }
+        playerRef.current = handle;
       })
       .catch(() => {
-        if (!disposed) setLoadError('無法載入 YouTube 播放器，請檢查網路連線後重新整理。');
+        if (!disposed) setLoadError('無法載入播放器，請檢查網路連線後重新整理。');
       });
 
     return () => {
       disposed = true;
-      try {
-        playerRef.current?.destroy();
-      } catch {
-        /* 播放器可能尚未建立完成 */
-      }
+      playerRef.current?.destroy();
       playerRef.current = null;
     };
-    // course.youtubeVideoId 換課時才重建
+    // 換來源或換影片才重建
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [course.youtubeVideoId]);
+  }, [video.provider, video.id, video.hash]);
 
   /* ---------- 進度儲存 ---------- */
   const persist = useCallback(() => {
@@ -200,11 +179,11 @@ export default function LessonView({ course, initialProgress, onSaveProgress, on
       const end = effEnd(seg);
 
       if (t >= end - 0.3) {
-        p.pauseVideo();
+        p.pause();
         if (reviewIndex !== null) {
           setReviewIndex(null);
           const back = segments[activeIndex];
-          if (back) p.seekTo(back.startSec, true);
+          if (back) p.seek(back.startSec);
         } else {
           if (document.fullscreenElement) void document.exitFullscreen?.();
           setQuizKey((k) => k + 1);
@@ -212,7 +191,7 @@ export default function LessonView({ course, initialProgress, onSaveProgress, on
           setPhase('quiz');
         }
       } else if (t < seg.startSec - 0.8) {
-        p.seekTo(seg.startSec, true);
+        p.seek(seg.startSec);
       }
     }, 250);
     return () => window.clearInterval(id);
@@ -225,7 +204,7 @@ export default function LessonView({ course, initialProgress, onSaveProgress, on
 
   /* ---------- 操作 ---------- */
   const seekTo = (sec: number) => {
-    playerRef.current?.seekTo(sec, true);
+    playerRef.current?.seek(sec);
     setCurrentTime(sec);
     posRef.current = sec;
   };
@@ -233,7 +212,7 @@ export default function LessonView({ course, initialProgress, onSaveProgress, on
   const changeRate = (r: number) => {
     setRate(r);
     rateRef.current = r;
-    playerRef.current?.setPlaybackRate(r);
+    playerRef.current?.setRate(r);
   };
 
   const toggleFullscreen = () => {
@@ -332,7 +311,7 @@ export default function LessonView({ course, initialProgress, onSaveProgress, on
   const playSeg = (index: number) => {    const seg = segments[index];
     if (!seg) return;
     seekTo(seg.startSec);
-    playerRef.current?.playVideo();
+    playerRef.current?.play();
     setPhase('playing');
   };
 
@@ -343,15 +322,15 @@ export default function LessonView({ course, initialProgress, onSaveProgress, on
     }
     if (resumeAtRef.current === null) seekTo(activeSeg.startSec);
     resumeAtRef.current = null;
-    playerRef.current?.playVideo();
+    playerRef.current?.play();
     setPhase('playing');
   };
 
   const handleTogglePlay = () => {
     const p = playerRef.current;
     if (!p) return;
-    if (playing) p.pauseVideo();
-    else p.playVideo();
+    if (playing) p.pause();
+    else p.play();
   };
 
   const handleCheck = (answers: Record<string, string[]>) => {
@@ -405,12 +384,12 @@ export default function LessonView({ course, initialProgress, onSaveProgress, on
     if (next >= segments.length) {
       setPhase('finished');
       setPlaying(false);
-      playerRef.current?.pauseVideo();
+      playerRef.current?.pause();
       return;
     }
     const seg = segments[next];
     seekTo(seg.startSec);
-    playerRef.current?.playVideo();
+    playerRef.current?.play();
     setPhase('playing');
   };
 
@@ -421,20 +400,20 @@ export default function LessonView({ course, initialProgress, onSaveProgress, on
     if (free) {
       setActiveIndex(index);
       seekTo(seg.startSec);
-      playerRef.current?.playVideo();
+      playerRef.current?.play();
       setPhase('playing');
       return;
     }
     setReviewIndex(index);
     seekTo(seg.startSec);
-    playerRef.current?.playVideo();
+    playerRef.current?.play();
     setPhase('playing');
   };
 
   const backToCurrent = () => {
     const seg = segments[activeIndex];
     setReviewIndex(null);
-    playerRef.current?.pauseVideo();
+    playerRef.current?.pause();
     if (seg) seekTo(seg.startSec);
   };
 
@@ -511,11 +490,13 @@ export default function LessonView({ course, initialProgress, onSaveProgress, on
           <div className={`player-box ${pseudoFull ? 'is-fullscreen' : ''}`} ref={boxRef}>
             <div className="player-wrap">
               <div className="player-host" ref={hostRef} />
-              <div
-                className="player-shield"
-                onClick={phase === 'intro' ? handleStart : handleTogglePlay}
-                role="presentation"
-              />
+              {video.provider === 'youtube' && (
+                <div
+                  className="player-shield"
+                  onClick={phase === 'intro' ? handleStart : handleTogglePlay}
+                  role="presentation"
+                />
+              )}
 
             {!ready && !loadError && (
               <div className="player-overlay">

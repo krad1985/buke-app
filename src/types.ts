@@ -34,15 +34,23 @@ export interface Segment {
   questions: Question[];
 }
 
+export type VideoProvider = 'youtube' | 'vimeo';
+
 export interface Course {
   courseId: string;
   /** 所屬系列；空字串表示未分類（只有總管理員看得到） */
   seriesId: string;
+  /** 影片來源；舊資料沒有這個欄位時視為 youtube */
+  videoProvider?: VideoProvider;
+  /** YouTube 影片 ID 或 Vimeo 數字 ID */
+  videoId?: string;
+  /** Vimeo 不公開連結的 h= 參數（YouTube 不使用） */
+  videoHash?: string;
+  /** 舊欄位：僅供相容讀取 */
+  youtubeVideoId?: string;
   title: string;
   description: string;
   teacher?: string;
-  /** YouTube 影片 ID（公開或不公開）；私人影片無法嵌入 */
-  youtubeVideoId: string;
   isPublished: boolean;
   sortOrder: number;
   /** 是否允許重看已通過的段落 */

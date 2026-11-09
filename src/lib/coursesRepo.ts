@@ -7,8 +7,15 @@ export function normalizeSegments(segments: Segment[]): Segment[] {
 }
 
 function normalizeCourse(course: Course): Course {
+  const provider = course.videoProvider ?? 'youtube';
+  const videoId = (course.videoId || course.youtubeVideoId || '').trim();
+  const { youtubeVideoId: _legacy, ...rest } = course;
+  void _legacy;
   return {
-    ...course,
+    ...rest,
+    videoProvider: provider,
+    videoId,
+    videoHash: provider === 'vimeo' ? (course.videoHash ?? '').trim() : '',
     sortOrder: Number.isFinite(course.sortOrder) ? course.sortOrder : 0,
     allowRewatch: course.allowRewatch !== false,
     segments: normalizeSegments(course.segments),
@@ -23,6 +30,8 @@ export async function listAllCourses(): Promise<Course[]> {
       return {
         ...data,
         courseId: d.id,
+        videoProvider: data.videoProvider ?? 'youtube',
+        videoId: data.videoId || data.youtubeVideoId || '',
         title: data.title ?? '（未命名課程）',
         description: data.description ?? '',
         youtubeVideoId: data.youtubeVideoId ?? '',
@@ -56,6 +65,8 @@ export function emptyCourse(courseId: string): Course {
   return {
     courseId,
     seriesId: '',
+    videoProvider: 'youtube',
+    videoId: '',
     title: '未命名課程',
     description: '',
     teacher: '',
