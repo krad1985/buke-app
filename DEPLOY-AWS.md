@@ -67,6 +67,24 @@
 ### 每次改版
 
 ```bash
+npm run deploy:aws
+```
+
+需要先設定兩個環境變數（PowerShell）：
+
+```powershell
+$env:S3_BUCKET="buke-app-web"
+$env:CF_DIST_ID="E1234567890"
+npm run deploy:aws
+```
+
+（cmd 用 `set S3_BUCKET=... && set CF_DIST_ID=... && npm run deploy:aws`）
+
+這支腳本會：建置 → 同步 `dist/` 到 S3（`assets/` 長快取、`index.html` 不快取）→ 清 CloudFront 快取。需要先安裝並設定 AWS CLI（`aws configure`）。
+
+手動版指令：
+
+```bash
 npm run build
 aws s3 sync dist/ s3://buke-app-web --delete
 aws cloudfront create-invalidation --distribution-id <DIST_ID> --paths "/*"
@@ -78,7 +96,26 @@ aws cloudfront create-invalidation --distribution-id <DIST_ID> --paths "/*"
 
 ---
 
-## 不建議的方案
+## 關於 Amplify 連結 GitHub
+
+Amplify 連結 GitHub 用的是 **AWS Amplify GitHub App**，安裝時可以只授權指定 repo（Only select repositories），所以「多個指定 repo」技術上沒問題。
+
+但有兩個現實問題：
+
+1. **政策問題**：公司 AWS 去授權一個員工的個人 GitHub repo，多數公司不會核准（等於把部署權限綁在個人帳號上）。
+2. **風險問題**：程式碼與部署流程都在個人帳號下，你離職或帳號被盜，公司就失去部署能力。
+
+如果公司不讓連 GitHub，有三條路：
+
+| 做法 | 說明 |
+| --- | --- |
+| **S3 + CloudFront（建議）** | 完全不需要 GitHub。本機或 IT 用 `npm run deploy:aws` 上傳，AWS 只看到一個 S3 bucket |
+| Amplify 手動部署 | Amplify 支援「不使用 Git 供應商」的上傳方式（上傳建置好的 zip），不連結 GitHub，但每次改版要手動上傳 |
+| 把 repo 搬到公司組織 | 長解。GitHub 支援轉移 repo 並保留歷史，之後 Amplify／CI 都能正常接 |
+
+以你們的狀況（個人 repo + 公司 AWS），我會直接走 **S3 + CloudFront**：設定一次，之後每次改版一行指令，不牽涉任何帳號授權。
+
+
 
 | 方案 | 為什麼不適合 |
 | --- | --- |
