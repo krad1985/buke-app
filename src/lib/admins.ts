@@ -219,7 +219,12 @@ export async function registerAdmin(
     request,
     createdAt: Date.now(),
   };
-  await setDoc(adminRef(uid), docData);
+  try {
+    await setDoc(adminRef(uid), docData);
+  } catch (err) {
+    await signOut(auth).catch(() => undefined);
+    throw err;
+  }
   return normalizeProfile(docData);
 }
 
@@ -304,6 +309,63 @@ export async function sendResetEmail(email: string): Promise<void> {
 
 export async function removeAdmin(account: string): Promise<void> {
   await deleteDoc(adminRef(account));
+}
+
+/* ---------------- 追加權限申請 ---------------- */
+
+export interface ExtraRequest extends Omit<AdminGrant, 'id'> {
+  id: string;
+  note: string;
+  at: number;
+}
+
+export interface ExtraRequestDoc {
+  uid: string;
+  email: string;
+  name: string;
+  items: ExtraRequest[];
+}
+
+const reqRef = (uid: string) => doc(db, 'adminRequests', uid);
+
+export async function submitExtraRequest(
+  uid: string,
+  email: string,
+  name: string,
+  req: Omit<AdminGrant, 'id'> & { note: string }
+): Promise<void> {
+  validateGrant(req);
+  const snap = await getDoc(reqRef(uid)).catch(() => null);
+  const existing = (snap?.data() as { items?: ExtraRequest[] } | undefined)?.items ?? [];
+  const item: ExtraRequest = { ...req, id: rid(), at: Date.now() };
+  await setDoc(reqRef(uid), { uid, email, name, items: [...existing, item] }, { merge: true });
+}
+
+export async function listExtraRequests(): Promise<ExtraRequestDoc[]> {
+  const snap = await getDocs(collection(db, 'adminRequests'));
+  return snap.docs
+    .map((d) => ({ uid: d.id, ...(d.data() as Omit<ExtraRequestDoc, 'uid'>) }))
+    .filter((d) => Array.isArray(d.items) && d.items.length > 0);
+}
+
+export async function approveExtraRequest(uid: string, itemId: string): Promise<void> {
+  const snap = await getDoc(reqRef(uid));
+  const items = (snap.data() as { items?: ExtraRequest[] } | undefined)?.items ?? [];
+  const item = items.find((i) => i.id === itemId);
+  if (!item) throw new Error('找不到這筆申請。');
+  await addGrant(uid, {
+    role: item.role,
+    region: item.region,
+    classroom: item.classroom,
+    seriesIds: item.seriesIds,
+  });
+  await setDoc(reqRef(uid), { items: items.filter((i) => i.id !== itemId) }, { merge: true });
+}
+
+export async function rejectExtraRequest(uid: string, itemId: string): Promise<void> {
+  const snap = await getDoc(reqRef(uid));
+  const items = (snap.data() as { items?: ExtraRequest[] } | undefined)?.items ?? [];
+  await setDoc(reqRef(uid), { items: items.filter((i) => i.id !== itemId) }, { merge: true });
 }
 
 export async function changeMyPassword(oldPass: string, newPass: string): Promise<void> {

@@ -2,14 +2,18 @@
 import {
   addGrant,
   approveAdmin,
+  approveExtraRequest,
   createAdmin,
   listAdmins,
+  listExtraRequests,
   listPendingAdmins,
   rejectAdmin,
+  rejectExtraRequest,
   removeAdmin,
   removeGrant,
   sendResetEmail,
   setAdminEnabled,
+  type ExtraRequestDoc,
 } from '../../lib/admins';
 import { REGIONS } from '../../lib/regions';
 import type { AdminGrant, AdminProfile, AdminRole, Series } from '../../types';
@@ -43,6 +47,7 @@ export default function AdminTab({ profile, series }: Props) {
 
   const [editingGrants, setEditingGrants] = useState<string | null>(null);
   const [pending, setPending] = useState<AdminProfile[] | null>(null);
+  const [extraDocs, setExtraDocs] = useState<ExtraRequestDoc[]>([]);
 
   const reload = useCallback(() => {
     listAdmins()
@@ -56,7 +61,12 @@ export default function AdminTab({ profile, series }: Props) {
     listPendingAdmins()
       .then(setPending)
       .catch(() => setPending([]));
-  }, []);
+    if (isSuper) {
+      listExtraRequests()
+        .then(setExtraDocs)
+        .catch(() => setExtraDocs([]));
+    }
+  }, [isSuper]);
 
   useEffect(() => {
     reload();
@@ -126,6 +136,66 @@ export default function AdminTab({ profile, series }: Props) {
 
       {error && <p className="form-error">{error}</p>}
       {ok && <p className="form-ok">{ok}</p>}
+
+      {isSuper && extraDocs.length > 0 && (
+        <div className="panel" style={{ marginBottom: 16 }}>
+          <h3>追加權限申請</h3>
+          <div className="table-scroll">
+            <table className="admin-table">
+              <thead>
+                <tr>
+                  <th>電子郵件</th>
+                  <th>申請內容</th>
+                  <th>說明</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {extraDocs.flatMap((d) =>
+                  d.items.map((it) => (
+                    <tr key={`${d.uid}-${it.id}`}>
+                      <td className="mono">{d.email}</td>
+                      <td>
+                        {it.role === 'series'
+                          ? '系列管理員'
+                          : it.role === 'region'
+                            ? `區域窗口（${it.region}）`
+                            : `教室窗口（${it.region}／${it.classroom}）`}
+                      </td>
+                      <td className="hint">{it.note}</td>
+                      <td className="ta-right">
+                        <button
+                          className="btn tiny primary"
+                          onClick={() => {
+                            approveExtraRequest(d.uid, it.id)
+                              .then(() => {
+                                setOk(`已加入權限：${d.email}`);
+                                reload();
+                              })
+                              .catch((e: unknown) => setError((e as Error).message));
+                          }}
+                        >
+                          核准
+                        </button>
+                        <button
+                          className="btn tiny ghost danger"
+                          onClick={() => {
+                            rejectExtraRequest(d.uid, it.id)
+                              .then(reload)
+                              .catch((e: unknown) => setError((e as Error).message));
+                          }}
+                        >
+                          拒絕
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {pendingVisible.length > 0 && (
         <div className="panel" style={{ marginBottom: 16 }}>
