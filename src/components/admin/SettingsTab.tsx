@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { loadSettings, saveSettings } from '../../lib/settings';
+import { logEvent } from '../../lib/audit';
 import type { AppSettings } from '../../types';
 
 export default function SettingsTab() {
@@ -20,6 +21,7 @@ export default function SettingsTab() {
     setSettings(next);
     try {
       await saveSettings(next);
+      logEvent({ action: 'settings.update', detail: { allowGuestView: value } });
       setMessage('已更新。');
     } catch (e) {
       setError('儲存失敗：' + (e as Error).message);

@@ -3,6 +3,7 @@ import SegmentCard from './SegmentCard';
 import TimecodePicker from './TimecodePicker';
 import { saveCourse } from '../../lib/coursesRepo';
 import { courseVideo, parseVideoUrl } from '../../lib/video';
+import { logEvent } from '../../lib/audit';
 import type { Course, Segment, Series } from '../../types';
 
 interface Props {
@@ -141,6 +142,7 @@ export default function CourseEditor({ course, series, onSaved, onCancel }: Prop
     setServerError(null);
     try {
       await saveCourse(draft);
+      logEvent({ action: 'course.save', target: draft.title, detail: { courseId: draft.courseId, published: draft.isPublished } });
       onSaved();
     } catch (e) {
       setServerError(

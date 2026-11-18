@@ -13,6 +13,7 @@ import {
 import { collection, deleteDoc, doc, getDoc, getDocs, setDoc, updateDoc } from 'firebase/firestore';
 import { auth, db, firebaseConfig } from './firebase';
 import { isRegionName } from './regions';
+import { logEvent } from './audit';
 import type { AdminGrant, AdminProfile, AdminRequest } from '../types';
 
 /**
@@ -110,6 +111,7 @@ export async function loginAdmin(email: string, pass: string): Promise<AdminProf
     await signOut(auth);
     throw new Error('這個帳號已被停用。');
   }
+  logEvent({ action: 'admin.login', target: profile.email });
   return profile;
 }
 
@@ -195,6 +197,11 @@ export async function createAdmin(input: NewAdminInput): Promise<void> {
     enabled: true,
     createdAt: Date.now(),
   });
+  logEvent({
+    action: 'admin.create',
+    target: input.email.trim(),
+    detail: { superAdmin: input.superAdmin, grants: input.grants.length },
+  });
 }
 
 /** 自助註冊：建立帳號並留下待核准的申請 */
@@ -252,10 +259,12 @@ export async function approveAdmin(account: string): Promise<void> {
     pending: false,
     approvedAt: Date.now(),
   });
+  logEvent({ action: 'admin.approve', target: profile.email, detail: { role: grant.role, region: grant.region } });
 }
 
 export async function rejectAdmin(account: string): Promise<void> {
   await deleteDoc(adminRef(account));
+  logEvent({ action: 'admin.reject', target: account });
 }
 
 export async function listPendingAdmins(): Promise<AdminProfile[]> {
@@ -280,6 +289,7 @@ export async function addGrant(account: string, grant: Omit<AdminGrant, 'id'>): 
     managedRegions: [...new Set([...profile.grants, grant].map((g) => g.region).filter(Boolean))],
     updatedAt: Date.now(),
   });
+  logEvent({ action: 'admin.grant_add', target: profile.email, detail: { role: grant.role, region: grant.region, classroom: grant.classroom } });
 }
 
 export async function removeGrant(account: string, grantId: string): Promise<void> {
@@ -295,20 +305,24 @@ export async function removeGrant(account: string, grantId: string): Promise<voi
     managedRegions: [...new Set(grants.map((g) => g.region).filter(Boolean))],
     updatedAt: Date.now(),
   });
+  logEvent({ action: 'admin.grant_remove', target: profile.email, detail: { grantId } });
 }
 
 export async function setAdminEnabled(account: string, enabled: boolean): Promise<void> {
   await updateDoc(adminRef(account), { enabled });
+  logEvent({ action: enabled ? 'admin.enable' : 'admin.disable', target: account });
 }
 
 /** 重設他人密碼：寄送 Firebase 的密碼重設信 */
 export async function sendResetEmail(email: string): Promise<void> {
   if (!email) throw new Error('這個帳號沒有電子郵件。');
   await sendPasswordResetEmail(auth, email);
+  logEvent({ action: 'admin.reset_password', target: email });
 }
 
 export async function removeAdmin(account: string): Promise<void> {
   await deleteDoc(adminRef(account));
+  logEvent({ action: 'admin.remove', target: account });
 }
 
 /* ---------------- 追加權限申請 ---------------- */
@@ -374,6 +388,7 @@ export async function changeMyPassword(oldPass: string, newPass: string): Promis
   if (newPass.length < 6) throw new Error('新密碼至少 6 個字元。');
   await reauthenticateWithCredential(user, EmailAuthProvider.credential(user.email, oldPass));
   await updatePassword(user, newPass);
+  logEvent({ action: 'admin.password_change', target: user.email });
 }
 
 export function roleLabel(p: AdminProfile): string {

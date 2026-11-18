@@ -98,12 +98,19 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
-    // 追加權限申請：本人可寫自己的申請；管理員可讀；只有總管理員會用到核准（寫 admins）
+    // 追加權限申請：本人可寫自己的申請；管理員可讀
     match /adminRequests/{uid} {
       allow get: if signedIn() && (request.auth.uid == uid || isAdmin());
       allow list: if isAdmin();
       allow create, update: if signedIn() && request.auth.uid == uid;
       allow delete: if isAdmin();
+    }
+
+    // 稽核紀錄：只寫不改不刪；學員端不寫入
+    match /auditLogs/{logId} {
+      allow create: if isAdmin() && request.resource.data.actorUid == request.auth.uid;
+      allow read: if isSuper();
+      allow update, delete: if false;
     }
 
     match /courses/{courseId} {

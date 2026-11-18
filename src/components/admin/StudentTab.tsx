@@ -10,6 +10,7 @@ import {
   saveStudent,
 } from '../../lib/roster';
 import { getPrefRegion, setPrefRegion } from '../../lib/adminPrefs';
+import { logEvent } from '../../lib/audit';
 import { REGIONS } from '../../lib/regions';
 import type { AdminProfile, Series, Student } from '../../types';
 import type { RosterRow } from '../../lib/roster';
@@ -104,6 +105,7 @@ export default function StudentTab({ profile, series }: { profile: AdminProfile;
       s.seriesIds.map((id) => series.find((x) => x.seriesId === id)?.name ?? id).join('、'),
     ]);
     downloadCsv(`學員名單_${region}_${new Date().toISOString().slice(0, 10)}.csv`, [header, ...body]);
+    logEvent({ action: 'roster.export', target: region, detail: { count: filtered.length } });
   };
 
   const handleImport = async () => {
@@ -120,6 +122,11 @@ export default function StudentTab({ profile, series }: { profile: AdminProfile;
       if (seriesId) parts.push(`已加入系列「${series.find((s) => s.seriesId === seriesId)?.name ?? ''}」`);
       if (result.duplicates.length) parts.push(`檔案內重複代碼：${result.duplicates.join('、')}`);
       setMessage(parts.join('｜'));
+      logEvent({
+        action: 'roster.import',
+        target: region,
+        detail: { count: result.created, series: seriesId || '', source: fileName || 'paste' },
+      });
       resetParsed();
       reload();
     } catch (e) {

@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+﻿import { useCallback, useEffect, useMemo, useState } from 'react';
 import { downloadCsv } from '../../lib/csv';
 import { segmentSeconds } from '../../lib/format';
 import { listAllCourses } from '../../lib/coursesRepo';
 import { listStudentsInRegion } from '../../lib/roster';
 import { loadRegionRecords, type StudentRecord } from '../../lib/progressRepo';
 import { getPrefRegion, setPrefRegion } from '../../lib/adminPrefs';
+import { logEvent } from '../../lib/audit';
 import { REGIONS } from '../../lib/regions';
 import type { AdminProfile, Course, Series } from '../../types';
 
@@ -193,6 +194,7 @@ export default function RecordTab({ profile, series }: Props) {
       }
     }
     downloadCsv(`學習明細_${region}_${new Date().toISOString().slice(0, 10)}.csv`, [header, ...body]);
+    logEvent({ action: 'records.export', target: region, detail: { kind: '明細', rows: body.length } });
   };
 
   const handleExportGroups = () => {
@@ -210,6 +212,7 @@ export default function RecordTab({ profile, series }: Props) {
       pct(g.done, g.total),
     ]);
     downloadCsv(`小組完成度_${region}_${new Date().toISOString().slice(0, 10)}.csv`, [header, ...body]);
+    logEvent({ action: 'records.export', target: region, detail: { kind: '小組完成度', rows: body.length } });
   };
 
   const handleExport = () => {
@@ -229,6 +232,7 @@ export default function RecordTab({ profile, series }: Props) {
     ]);
     const legend = [[''], [''], ['代號對照'], ...courses.map((c, i) => [codes[i], c.title])];
     downloadCsv(`學習記錄_${region}_${new Date().toISOString().slice(0, 10)}.csv`, [header, ...body, ...legend]);
+    logEvent({ action: 'records.export', target: region, detail: { kind: '總表', rows: body.length } });
   };
 
   return (

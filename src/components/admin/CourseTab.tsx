@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import CourseEditor from './CourseEditor';
 import { withTimeout } from '../../lib/async';
 import { downloadText } from '../../lib/csv';
+import { logEvent } from '../../lib/audit';
 import { deleteCourse, emptyCourse, listAllCourses, newCourseId, saveCourse } from '../../lib/coursesRepo';
 import type { AdminProfile, Course, Series } from '../../types';
 
@@ -88,6 +89,7 @@ export default function CourseTab({ profile, series }: Props) {
     setBusy(true);
     try {
       await deleteCourse(course.courseId);
+      logEvent({ action: 'course.delete', target: course.title, detail: { courseId: course.courseId } });
       reload();
     } catch (e) {
       setError('刪除失敗：' + (e as Error).message);

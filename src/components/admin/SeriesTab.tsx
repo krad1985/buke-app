@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { saveSeries, deleteSeries, newSeriesId } from '../../lib/series';
+import { logEvent } from '../../lib/audit';
 import type { Series } from '../../types';
 
 interface Props {
@@ -20,6 +21,7 @@ export default function SeriesTab({ series, onChanged }: Props) {
     setError(null);
     try {
       await saveSeries({ seriesId: newSeriesId(), name, sortOrder });
+      logEvent({ action: 'series.save', target: name });
       setName('');
       setSortOrder(sortOrder + 1);
       onChanged();
@@ -70,7 +72,10 @@ export default function SeriesTab({ series, onChanged }: Props) {
                         onClick={() => {
                           if (!window.confirm(`刪除系列「${s.name}」？（已屬於此系列的課程不會被刪除，但會失去系列歸屬）`))
                             return;
-                          void deleteSeries(s.seriesId).then(onChanged);
+                          void deleteSeries(s.seriesId).then(() => {
+                            logEvent({ action: 'series.delete', target: s.name });
+                            onChanged();
+                          });
                         }}
                       >
                         刪除
