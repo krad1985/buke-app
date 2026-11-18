@@ -84,6 +84,8 @@ export interface Student {
   region: string;
   /** 可觀看的系列（可跨系列） */
   seriesIds: string[];
+  /** 匯入時保留的其他欄位（儲訓類別、初培重培、出席率…），鍵為原始表頭 */
+  extra?: Record<string, string>;
   updatedAt: number;
 }
 

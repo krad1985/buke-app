@@ -75,8 +75,7 @@ export default function RecordTab({ profile, series }: Props) {
 
   const rows = useMemo<Row[]>(() => {
     if (!records) return [];
-    const list: Row[] = records.map((rec) => {
-      const cells: Record<string, string> = {};
+    const list: Row[] = records.map((rec) => {      const cells: Record<string, string> = {};
       let doneCount = 0;
       let lastUpdated = 0;
       let totalSec = 0;
@@ -115,9 +114,54 @@ export default function RecordTab({ profile, series }: Props) {
     return filtered.sort((a, b) => a.studentId.localeCompare(b.studentId) || a.name.localeCompare(b.name));
   }, [records, courses, onlyRecorded]);
 
+  interface GroupRow {
+    groupLarge: string;
+    groupSmall: string;
+    count: number;
+    perCourse: Record<string, number>;
+    done: number;
+    total: number;
+  }
+
+  const groupRows = useMemo<GroupRow[]>(() => {
+    if (!records || courses.length === 0) return [];
+    const map = new Map<string, GroupRow>();
+    for (const rec of records) {
+      const g = rec.student;
+      const key = `${g.groupLarge}|${g.groupSmall}`;
+      const row =
+        map.get(key) ??
+        ({
+          groupLarge: g.groupLarge,
+          groupSmall: g.groupSmall,
+          count: 0,
+          perCourse: {},
+          done: 0,
+          total: 0,
+        } as GroupRow);
+      row.count += 1;
+      for (const course of courses) {
+        const passed = rec.progress[course.courseId]?.passed.length ?? 0;
+        const complete = course.segments.length > 0 && passed >= course.segments.length;
+        row.total += 1;
+        if (complete) {
+          row.done += 1;
+          row.perCourse[course.courseId] = (row.perCourse[course.courseId] ?? 0) + 1;
+        }
+      }
+      map.set(key, row);
+    }
+    return [...map.values()].sort(
+      (a, b) =>
+        a.groupLarge.localeCompare(b.groupLarge) || a.groupSmall.localeCompare(b.groupSmall)
+    );
+  }, [records, courses]);
+
+  const pct = (done: number, base: number) => (base > 0 ? Math.round((done / base) * 100) : 0);
+
   const handleExportDetail = () => {
     const header = [
-      '區域', '學員代碼', '姓名', '母班', '大組', '小組', '身份',
+      '區域', '學員代碼', '姓名', '母班', '大組', '小組', '身份', '儲訓類別', '初培重培',
       '系列', '課程', '狀態', '已通過段數', '總段數', '已學習時數(分)', '最後更新',
     ];
     const seriesName = (id: string) => series.find((s) => s.seriesId === id)?.name ?? '';
@@ -136,6 +180,8 @@ export default function RecordTab({ profile, series }: Props) {
           rec.student.groupLarge,
           rec.student.groupSmall,
           rec.student.role,
+          rec.student.extra?.['儲訓類別'] ?? '',
+          rec.student.extra?.['初培重培'] ?? '',
           seriesName(course.seriesId ?? ''),
           course.title,
           total > 0 && passed >= total ? '完課' : passed > 0 ? '進行中' : '未開始',
@@ -147,6 +193,23 @@ export default function RecordTab({ profile, series }: Props) {
       }
     }
     downloadCsv(`學習明細_${region}_${new Date().toISOString().slice(0, 10)}.csv`, [header, ...body]);
+  };
+
+  const handleExportGroups = () => {
+    const header = [
+      '區域', '大組', '小組', '人數',
+      ...courses.map((_c, i) => `${codes[i]} 完成率%`),
+      '總完成率%',
+    ];
+    const body = groupRows.map((g) => [
+      region,
+      g.groupLarge,
+      g.groupSmall,
+      g.count,
+      ...courses.map((c) => pct(g.perCourse[c.courseId] ?? 0, g.count)),
+      pct(g.done, g.total),
+    ]);
+    downloadCsv(`小組完成度_${region}_${new Date().toISOString().slice(0, 10)}.csv`, [header, ...body]);
   };
 
   const handleExport = () => {
@@ -205,7 +268,59 @@ export default function RecordTab({ profile, series }: Props) {
           <p>請先選擇區域。</p>
         </div>
       ) : (
-        <div className="panel">
+        <>
+          {groupRows.length > 0 && (
+            <div className="panel" style={{ marginBottom: 16 }}>
+              <div className="section-head">
+                <h3>小組完成度</h3>
+                <button className="btn small" onClick={handleExportGroups}>
+                  匯出小組完成度
+                </button>
+              </div>
+              <div className="table-scroll">
+                <table className="admin-table compact">
+                  <thead>
+                    <tr>
+                      <th>大組</th>
+                      <th>小組</th>
+                      <th>人數</th>
+                      {courses.map((c, i) => (
+                        <th key={c.courseId} className="course-col" title={c.title}>
+                          {codes[i]}
+                        </th>
+                      ))}
+                      <th>總完成率</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {groupRows.map((g) => (
+                      <tr key={`${g.groupLarge}-${g.groupSmall}`}>
+                        <td>{g.groupLarge || '—'}</td>
+                        <td>{g.groupSmall || '—'}</td>
+                        <td className="mono">{g.count}</td>
+                        {courses.map((c) => (
+                          <td key={c.courseId} className="mark-cell">
+                            {pct(g.perCourse[c.courseId] ?? 0, g.count)}%
+                          </td>
+                        ))}
+                        <td className="mark-cell strong">{pct(g.done, g.total)}%</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="legend">
+                {courses.map((c, i) => (
+                  <span key={c.courseId}>
+                    <b>{codes[i]}</b> {c.title}
+                  </span>
+                ))}
+              </p>
+              <p className="hint">完成率＝該組「已完課人數 ÷ 人數」；總完成率＝該組所有（人×課）中完課的比率。</p>
+            </div>
+          )}
+
+          <div className="panel">
           <div className="section-head">
             <div className="row-gap">
               <span className="hint">
@@ -290,7 +405,8 @@ export default function RecordTab({ profile, series }: Props) {
               {rows.length > 300 && <p className="hint">畫面只顯示前 300 筆，匯出會包含全部。</p>}
             </>
           )}
-        </div>
+          </div>
+        </>
       )}
     </div>
   );

@@ -1696,3 +1696,8 @@ textarea.input {
 .peers-list li.me .peers-name {
   color: var(--accent);
 }
+.mark-cell.strong {
+  font-weight: 700;
+  color: var(--ink);
+  background: #f7f5ef;
+}

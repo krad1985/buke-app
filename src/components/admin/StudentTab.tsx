@@ -84,6 +84,28 @@ export default function StudentTab({ profile, series }: { profile: AdminProfile;
     downloadCsv(`學員名單範本_${region || '空白'}.csv`, [TEMPLATE_HEADER]);
   };
 
+  const handleExportRoster = () => {
+    if (filtered.length === 0) return;
+    const extraKeys = [...new Set(filtered.flatMap((s) => Object.keys(s.extra ?? {})))];
+    const header = [
+      '區域', '學員代碼', '姓名', '手機', '母班', '大組', '小組', '身份',
+      ...extraKeys, '系列',
+    ];
+    const body = filtered.map((s) => [
+      region,
+      s.studentId,
+      s.name,
+      s.phone ?? '',
+      s.classroom,
+      s.groupLarge,
+      s.groupSmall,
+      s.role,
+      ...extraKeys.map((k) => s.extra?.[k] ?? ''),
+      s.seriesIds.map((id) => series.find((x) => x.seriesId === id)?.name ?? id).join('、'),
+    ]);
+    downloadCsv(`學員名單_${region}_${new Date().toISOString().slice(0, 10)}.csv`, [header, ...body]);
+  };
+
   const handleImport = async () => {
     if (!parsed || parsed.rows.length === 0 || !region) return;
     setBusy(true);
@@ -395,6 +417,32 @@ export default function StudentTab({ profile, series }: { profile: AdminProfile;
                     onChange={(e) => setEditing({ ...editing, role: e.target.value })}
                   />
                 </label>
+                <label className="field">
+                  <span>儲訓類別</span>
+                  <input
+                    className="input"
+                    value={editing.extra?.['儲訓類別'] ?? ''}
+                    onChange={(e) =>
+                      setEditing({
+                        ...editing,
+                        extra: { ...(editing.extra ?? {}), 儲訓類別: e.target.value },
+                      })
+                    }
+                  />
+                </label>
+                <label className="field">
+                  <span>初培重培</span>
+                  <input
+                    className="input"
+                    value={editing.extra?.['初培重培'] ?? ''}
+                    onChange={(e) =>
+                      setEditing({
+                        ...editing,
+                        extra: { ...(editing.extra ?? {}), 初培重培: e.target.value },
+                      })
+                    }
+                  />
+                </label>
                 {series.length > 0 && (
                   <div className="field span2">
                     <span>可見系列</span>
@@ -434,6 +482,9 @@ export default function StudentTab({ profile, series }: { profile: AdminProfile;
                     刪除選取（{selected.length}）
                   </button>
                 )}
+                <button className="btn small" onClick={handleExportRoster} disabled={filtered.length === 0}>
+                  匯出名單
+                </button>
                 <input
                   className="input"
                   style={{ width: 200 }}
@@ -463,6 +514,8 @@ export default function StudentTab({ profile, series }: { profile: AdminProfile;
                       <th>大組</th>
                       <th>小組</th>
                       <th>身份</th>
+                      <th>儲訓類別</th>
+                      <th>初培重培</th>
                       <th />
                     </tr>
                   </thead>
@@ -486,6 +539,8 @@ export default function StudentTab({ profile, series }: { profile: AdminProfile;
                         <td>{s.groupLarge}</td>
                         <td>{s.groupSmall}</td>
                         <td>{s.role}</td>
+                        <td>{s.extra?.['儲訓類別'] ?? ''}</td>
+                        <td>{s.extra?.['初培重培'] ?? ''}</td>
                         <td className="ta-right">
                           <button className="btn tiny" onClick={() => setEditing({ ...s })}>
                             編輯

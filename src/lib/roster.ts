@@ -71,6 +71,7 @@ function normalizeStudent(s: Student): Student {
     groupLarge: s.groupLarge ?? '',
     groupSmall: s.groupSmall ?? '',
     seriesIds: Array.isArray(s.seriesIds) ? s.seriesIds : [],
+    extra: s.extra && typeof s.extra === 'object' ? s.extra : {},
   };
 }
 
@@ -139,6 +140,8 @@ export interface RosterRow {
   groupLarge: string;
   groupSmall: string;
   role: string;
+  /** 未對應到標準欄位的其他欄位（原樣保留） */
+  extra: Record<string, string>;
 }
 
 type ColumnKey = keyof RosterRow;
@@ -206,6 +209,14 @@ export function parseRosterMatrix(matrix: string[][]): { rows: RosterRow[]; erro
       return idx >= 0 ? cells[idx] ?? '' : '';
     };
 
+    // 未對應到標準欄位的欄位，原樣保留（儲訓類別、初培重培…）
+    const extra: Record<string, string> = {};
+    header.forEach((title, idx) => {
+      if (!title || cols[idx]) return;
+      const value = (cells[idx] ?? '').trim();
+      if (value) extra[title] = value;
+    });
+
     const studentId = normalizeCode(pick('studentId'));
     const name = pick('name');
     if (!studentId && !name) continue;
@@ -242,6 +253,7 @@ export function parseRosterMatrix(matrix: string[][]): { rows: RosterRow[]; erro
       groupLarge: pick('groupLarge'),
       groupSmall: pick('groupSmall'),
       role: pick('role'),
+      extra,
     });
   }
 
@@ -331,6 +343,7 @@ export async function importRoster(
           groupLarge: row.groupLarge,
           groupSmall: row.groupSmall,
           role: row.role,
+          extra: row.extra,
           updatedAt: Date.now(),
           ...(options.seriesId ? { seriesIds: arrayUnion(options.seriesId) } : {}),
         },
