@@ -1,4 +1,4 @@
-import { deleteApp, initializeApp } from 'firebase/app';
+﻿import { deleteApp, initializeApp } from 'firebase/app';
 import {
   EmailAuthProvider,
   createUserWithEmailAndPassword,
@@ -67,6 +67,10 @@ export function normalizeProfile(raw: Record<string, unknown>, activeGrantId: st
     ];
   }
 
+  const managedRegions = Array.isArray(raw.managedRegions)
+    ? (raw.managedRegions as string[])
+    : [...new Set(grants.map((g) => g.region).filter(Boolean))];
+
   const base: AdminProfile = {
     account: (raw.account as string) ?? '',
     email: (raw.email as string) ?? '',
@@ -74,6 +78,7 @@ export function normalizeProfile(raw: Record<string, unknown>, activeGrantId: st
     enabled: raw.enabled !== false,
     pending: raw.pending === true,
     request: (raw.request as AdminRequest | undefined) ?? undefined,
+    managedRegions,
     superAdmin,
     grants,
     role: 'super',
@@ -122,6 +127,7 @@ export async function bootstrapAdmin(email: string, pass: string, name: string):
     name: name.trim() || '系統管理員',
     superAdmin: true,
     grants: [],
+    managedRegions: [],
     enabled: true,
     createdAt: Date.now(),
   });
@@ -185,6 +191,7 @@ export async function createAdmin(input: NewAdminInput): Promise<void> {
     name: input.name.trim() || input.email.trim(),
     superAdmin: input.superAdmin,
     grants: input.grants.map((g) => ({ ...g, id: rid() })),
+    managedRegions: [...new Set(input.grants.map((g) => g.region).filter(Boolean))],
     enabled: true,
     createdAt: Date.now(),
   });
@@ -206,6 +213,7 @@ export async function registerAdmin(
     name: name.trim() || email.trim(),
     superAdmin: false,
     grants: [],
+    managedRegions: [],
     enabled: false,
     pending: true,
     request,
@@ -234,6 +242,7 @@ export async function approveAdmin(account: string): Promise<void> {
 
   await updateDoc(adminRef(account), {
     grants: [grant],
+    managedRegions: [grant.region].filter(Boolean),
     enabled: true,
     pending: false,
     approvedAt: Date.now(),
@@ -263,6 +272,7 @@ export async function addGrant(account: string, grant: Omit<AdminGrant, 'id'>): 
   const profile = normalizeProfile({ ...(snap.data() as Record<string, unknown>), account });
   await updateDoc(adminRef(account), {
     grants: [...profile.grants, { ...grant, id: rid() }],
+    managedRegions: [...new Set([...profile.grants, grant].map((g) => g.region).filter(Boolean))],
     updatedAt: Date.now(),
   });
 }
@@ -275,7 +285,11 @@ export async function removeGrant(account: string, grantId: string): Promise<voi
   if (grants.length === 0 && !profile.superAdmin) {
     throw new Error('至少要保留一個權限；不用了就停用帳號。');
   }
-  await updateDoc(adminRef(account), { grants, updatedAt: Date.now() });
+  await updateDoc(adminRef(account), {
+    grants,
+    managedRegions: [...new Set(grants.map((g) => g.region).filter(Boolean))],
+    updatedAt: Date.now(),
+  });
 }
 
 export async function setAdminEnabled(account: string, enabled: boolean): Promise<void> {

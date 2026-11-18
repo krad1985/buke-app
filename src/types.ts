@@ -119,6 +119,8 @@ export interface AdminProfile {
   /** 已註冊但尚未核准 */
   pending?: boolean;
   request?: AdminRequest;
+  /** 由 grants 推導：可管理的區域（給規則判斷用） */
+  managedRegions?: string[];
   /** 總管理員：全權，不需要 grants */
   superAdmin: boolean;
   /** 可切換的身分 */

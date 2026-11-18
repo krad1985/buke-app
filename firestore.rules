@@ -1,10 +1,11 @@
 rules_version = '2';
 
 // ============================================================
-// 管理端使用 Firebase Auth（電子郵件＋密碼）
-//   - 只有 admins/{uid} 存在、enabled、且非 pending 的人能改資料
-//   - 學員端維持免登入：課程、名單、系列、設定可讀；進度可讀可寫
-//   - 首次建立總管理員靠 config/admin_root 標記（貼完規則請立刻建立）
+// 管理端：Firebase Auth（電子郵件＋密碼）
+//   - 管理員以 admins/{uid} 判斷，須 enabled 且非 pending
+//   - 總管理員可做任何事
+//   - 區域窗口只能：核准自己區的「教室窗口」申請、停用/啟用、移除
+//   - 學員端免登入：課程/名單/系列/設定可讀，進度可讀可寫
 // ============================================================
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -12,31 +13,68 @@ service cloud.firestore {
     function signedIn() {
       return request.auth != null;
     }
-    function adminDoc() {
+    function hasAdminDoc() {
+      return signedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+    function myAdmin() {
       return get(/databases/$(database)/documents/admins/$(request.auth.uid)).data;
     }
     function isAdmin() {
-      return signedIn()
-        && exists(/databases/$(database)/documents/admins/$(request.auth.uid))
-        && adminDoc().get('enabled', false) == true
-        && adminDoc().get('pending', false) == false;
+      return hasAdminDoc()
+        && myAdmin().get('enabled', false) == true
+        && myAdmin().get('pending', false) == false;
     }
     function isSuper() {
-      return isAdmin() && adminDoc().get('superAdmin', false) == true;
+      return isAdmin() && myAdmin().get('superAdmin', false) == true;
+    }
+    function myRegions() {
+      return myAdmin().get('managedRegions', []);
     }
     function bootstrapped() {
       return exists(/databases/$(database)/documents/config/admin_root);
     }
 
-    // 管理員名單
+    // 區域窗口核准：只能把「自己區的教室窗口申請」變成「該教室的窗口權限」
+    function regionApproval() {
+      return isAdmin()
+        && resource.data.get('pending', false) == true
+        && resource.data.get('superAdmin', false) == false
+        && resource.data.get('request', {}).get('role', '') == 'classroom'
+        && myRegions().hasAny([resource.data.get('request', {}).get('region', '')])
+        && request.resource.data.get('pending', false) == false
+        && request.resource.data.get('enabled', false) == true
+        && request.resource.data.get('superAdmin', false) == false
+        && request.resource.data.get('email', '') == resource.data.get('email', '')
+        && request.resource.data.get('grants', []).size() == 1
+        && request.resource.data.grants[0].get('role', '') == 'classroom'
+        && request.resource.data.grants[0].get('region', '')
+             == resource.data.get('request', {}).get('region', '')
+        && request.resource.data.grants[0].get('classroom', '')
+             == resource.data.get('request', {}).get('classroom', '');
+    }
+
+    // 區域窗口只能切換 enabled
+    function regionToggle() {
+      return isAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['enabled'])
+        && resource.data.get('grants', []).size() == 1
+        && resource.data.grants[0].get('role', '') == 'classroom'
+        && myRegions().hasAny([resource.data.grants[0].get('region', '')]);
+    }
+
+    function regionDelete() {
+      return isAdmin()
+        && resource.data.get('grants', []).size() == 1
+        && resource.data.grants[0].get('role', '') == 'classroom'
+        && myRegions().hasAny([resource.data.grants[0].get('region', '')]);
+    }
+
     match /admins/{uid} {
-      // 單筆：本人可讀（含待核准的人）；管理員可讀
       allow get: if signedIn() && (request.auth.uid == uid || isAdmin());
-      // 整批：只有管理員可列舉（避免待核准的人掃全表）
       allow list: if isAdmin();
 
-      // 自助註冊：只能建立自己的、且必須是「待核准、無權限」
-      // 例外：尚未 bootstrap 時，允許建立第一位總管理員
+      // 自助註冊（只能建立自己的「待核准、無權限」）；
+      // 例外：尚未 bootstrap 時允許建立第一位總管理員
       allow create: if signedIn() && request.auth.uid == uid && (
         (
           request.resource.data.superAdmin == false
@@ -50,10 +88,10 @@ service cloud.firestore {
         )
       );
 
-      allow update, delete: if isSuper();
+      allow update: if isSuper() || regionApproval() || regionToggle();
+      allow delete: if isSuper() || regionDelete();
     }
 
-    // 首次建立總管理員的標記
     match /config/admin_root {
       allow read: if true;
       allow create: if signedIn() && !bootstrapped();
@@ -75,7 +113,6 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // 登入索引：學員要能單筆查（知道代碼或手機），不能列舉
     match /phones/{key} {
       allow get: if true;
       allow list: if isAdmin();
@@ -92,7 +129,7 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // 學習進度：學員端寫入，維持開放（防君子）
+    // 學習進度：學員端寫入，維持開放
     match /regions/{region}/students/{studentId}/progress/{courseId} {
       allow read, write: if true;
     }

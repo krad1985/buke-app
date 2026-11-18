@@ -1,12 +1,10 @@
 import { useState } from 'react';
-import { authMessage, bootstrapAdmin, loginAdmin, registerAdmin } from '../../lib/admins';
+import { authMessage, loginAdmin, registerAdmin } from '../../lib/admins';
 import { REGIONS } from '../../lib/regions';
 import type { AdminProfile, AdminRequest } from '../../types';
 
-type Mode = 'login' | 'setup' | 'register';
-
 export default function AdminLogin({ onSignedIn }: { onSignedIn: (p: AdminProfile) => void }) {
-  const [mode, setMode] = useState<Mode>('login');
+  const [mode, setMode] = useState<'login' | 'register'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
@@ -18,19 +16,19 @@ export default function AdminLogin({ onSignedIn }: { onSignedIn: (p: AdminProfil
     note: '',
   });
   const [error, setError] = useState<string | null>(null);
+  const [ok, setOk] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
     setError(null);
+    setOk(null);
     try {
-      if (mode === 'setup') {
-        onSignedIn(await bootstrapAdmin(email, password, name));
-      } else if (mode === 'register') {
+      if (mode === 'register') {
         await registerAdmin(email, password, name, request);
+        setOk('已送出申請，核准後即可登入。');
         setMode('login');
-        setError('已送出申請，請等管理員核准後再登入。');
       } else {
         onSignedIn(await loginAdmin(email, password));
       }
@@ -44,9 +42,7 @@ export default function AdminLogin({ onSignedIn }: { onSignedIn: (p: AdminProfil
 
   return (
     <div className="panel login-panel">
-      <h1>
-        {mode === 'setup' ? '建立總管理員' : mode === 'register' ? '申請管理帳號' : '管理後台'}
-      </h1>
+      <h1>{mode === 'register' ? '申請管理帳號' : '管理後台'}</h1>
 
       <form onSubmit={submit} className="login-form">
         <label className="field">
@@ -72,15 +68,12 @@ export default function AdminLogin({ onSignedIn }: { onSignedIn: (p: AdminProfil
           />
         </label>
 
-        {mode !== 'login' && (
-          <label className="field">
-            <span>姓名</span>
-            <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
-          </label>
-        )}
-
         {mode === 'register' && (
           <>
+            <label className="field">
+              <span>姓名</span>
+              <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
+            </label>
             <label className="field">
               <span>申請角色</span>
               <select
@@ -135,10 +128,11 @@ export default function AdminLogin({ onSignedIn }: { onSignedIn: (p: AdminProfil
           </>
         )}
 
-        {error && <p className={mode === 'register' && !error.includes('失敗') ? 'form-ok' : 'form-error'}>{error}</p>}
+        {error && <p className="form-error">{error}</p>}
+        {ok && <p className="form-ok">{ok}</p>}
 
         <button className="btn primary" type="submit" disabled={busy}>
-          {busy ? '處理中…' : mode === 'setup' ? '建立並登入' : mode === 'register' ? '送出申請' : '登入'}
+          {busy ? '處理中…' : mode === 'register' ? '送出申請' : '登入'}
         </button>
       </form>
 
@@ -149,25 +143,11 @@ export default function AdminLogin({ onSignedIn }: { onSignedIn: (p: AdminProfil
           onClick={() => {
             setMode(mode === 'login' ? 'register' : 'login');
             setError(null);
+            setOk(null);
           }}
         >
           {mode === 'register' ? '回登入' : '申請帳號'}
         </button>
-        {mode === 'login' && (
-          <>
-            {'　'}
-            <button
-              type="button"
-              className="link-btn"
-              onClick={() => {
-                setMode('setup');
-                setError(null);
-              }}
-            >
-              第一次使用：建立總管理員
-            </button>
-          </>
-        )}
       </p>
     </div>
   );

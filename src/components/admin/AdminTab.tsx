@@ -70,6 +70,14 @@ export default function AdminTab({ profile, series }: Props) {
     );
   }, [admins, isSuper, profile.region]);
 
+  const pendingVisible = useMemo(() => {
+    const list = pending ?? [];
+    if (isSuper) return list;
+    return list.filter(
+      (p) => p.request?.role === 'classroom' && p.request.region === profile.region
+    );
+  }, [pending, isSuper, profile.region]);
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
@@ -119,9 +127,9 @@ export default function AdminTab({ profile, series }: Props) {
       {error && <p className="form-error">{error}</p>}
       {ok && <p className="form-ok">{ok}</p>}
 
-      {isSuper && pending && pending.length > 0 && (
+      {pendingVisible.length > 0 && (
         <div className="panel" style={{ marginBottom: 16 }}>
-          <h3>待核准申請（{pending.length}）</h3>
+          <h3>待核准申請（{pendingVisible.length}）</h3>
           <div className="table-scroll">
             <table className="admin-table">
               <thead>
@@ -134,7 +142,7 @@ export default function AdminTab({ profile, series }: Props) {
                 </tr>
               </thead>
               <tbody>
-                {pending.map((p) => (
+                {pendingVisible.map((p) => (
                   <tr key={p.account}>
                     <td className="mono">{p.email}</td>
                     <td>{p.name}</td>
