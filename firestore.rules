@@ -18,11 +18,11 @@ service cloud.firestore {
     function isAdmin() {
       return signedIn()
         && exists(/databases/$(database)/documents/admins/$(request.auth.uid))
-        && adminDoc().enabled == true
-        && adminDoc().pending != true;
+        && adminDoc().get('enabled', false) == true
+        && adminDoc().get('pending', false) == false;
     }
     function isSuper() {
-      return isAdmin() && adminDoc().superAdmin == true;
+      return isAdmin() && adminDoc().get('superAdmin', false) == true;
     }
     function bootstrapped() {
       return exists(/databases/$(database)/documents/config/admin_root);
@@ -30,7 +30,10 @@ service cloud.firestore {
 
     // 管理員名單
     match /admins/{uid} {
-      allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
+      // 單筆：本人可讀（含待核准的人）；管理員可讀
+      allow get: if signedIn() && (request.auth.uid == uid || isAdmin());
+      // 整批：只有管理員可列舉（避免待核准的人掃全表）
+      allow list: if isAdmin();
 
       // 自助註冊：只能建立自己的、且必須是「待核准、無權限」
       // 例外：尚未 bootstrap 時，允許建立第一位總管理員
