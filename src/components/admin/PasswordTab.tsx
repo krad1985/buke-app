@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { changeMyPassword } from '../../lib/admins';
+import { changeMyPassword, authMessage } from '../../lib/admins';
 import type { AdminProfile } from '../../types';
 
 interface Props {
@@ -25,14 +25,15 @@ export default function PasswordTab({ profile, onChanged }: Props) {
     }
     setBusy(true);
     try {
-      const updated = await changeMyPassword(profile.account, oldPassword, newPassword);
-      onChanged(updated);
-      setMessage('密碼已更新，下次請用新密碼登入。');
+      await changeMyPassword(oldPassword, newPassword);
+      onChanged(profile);
+      setMessage('密碼已更新。');
       setOldPassword('');
       setNewPassword('');
       setConfirm('');
     } catch (err) {
-      setError((err as Error).message);
+      const code = (err as { code?: string }).code;
+      setError(code ? authMessage(code) : (err as Error).message);
     } finally {
       setBusy(false);
     }
@@ -41,12 +42,8 @@ export default function PasswordTab({ profile, onChanged }: Props) {
   return (
     <div className="admin-home">
       <div className="admin-toolbar">
-        <div>
-          <h2>我的密碼</h2>
-          <p className="hint">
-            目前登入：{profile.account}（{profile.name}）
-          </p>
-        </div>
+        <h2>我的密碼</h2>
+        <span className="hint">{profile.email}</span>
       </div>
 
       <div className="panel" style={{ maxWidth: 420 }}>
@@ -65,6 +62,7 @@ export default function PasswordTab({ profile, onChanged }: Props) {
             <span>新密碼</span>
             <input
               className="input"
+              type="password"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
               required
@@ -74,6 +72,7 @@ export default function PasswordTab({ profile, onChanged }: Props) {
             <span>再輸入一次</span>
             <input
               className="input"
+              type="password"
               value={confirm}
               onChange={(e) => setConfirm(e.target.value)}
               required

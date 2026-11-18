@@ -100,12 +100,25 @@ export interface AdminGrant {
   seriesIds: string[];
 }
 
-/** 管理員（doc ID = 帳號） */
+/** 註冊時填寫的申請內容 */
+export interface AdminRequest {
+  role: 'series' | 'region' | 'classroom';
+  region: string;
+  classroom: string;
+  seriesIds: string[];
+  note: string;
+}
+
+/** 管理員（doc ID = Firebase Auth uid） */
 export interface AdminProfile {
+  /** Firebase Auth uid，也是資料庫文件 ID */
   account: string;
+  email: string;
   name: string;
-  pass: string;
   enabled: boolean;
+  /** 已註冊但尚未核准 */
+  pending?: boolean;
+  request?: AdminRequest;
   /** 總管理員：全權，不需要 grants */
   superAdmin: boolean;
   /** 可切換的身分 */

@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useState } from 'react';
+﻿import { useEffect, useMemo, useState } from 'react';
 import AdminLogin from './AdminLogin';
 import AdminTab from './AdminTab';
 import CourseTab from './CourseTab';
@@ -7,15 +7,7 @@ import RecordTab from './RecordTab';
 import SeriesTab from './SeriesTab';
 import SettingsTab from './SettingsTab';
 import StudentTab from './StudentTab';
-import {
-  applyActive,
-  clearSession,
-  ensureDefaultAdmin,
-  loadSessionState,
-  roleLabel,
-  saveSession,
-} from '../../lib/admins';
-import { withTimeout } from '../../lib/async';
+import { applyActive, loadProfile, logoutAdmin, roleLabel, watchAuth } from '../../lib/admins';
 import { listSeries } from '../../lib/series';
 import type { AdminProfile, Series } from '../../types';
 
@@ -39,46 +31,64 @@ const TABS_BY_ROLE: Record<AdminProfile['role'], TabId[]> = {
 };
 
 export default function AdminApp() {
-  const initial = useMemo(() => loadSessionState(), []);
-  const [profile, setProfile] = useState<AdminProfile | null>(initial?.profile ?? null);
-  const [activeGrantId, setActiveGrantId] = useState<string | null>(initial?.activeGrantId ?? null);
+  const [profile, setProfile] = useState<AdminProfile | null>(null);
   const [checking, setChecking] = useState(true);
   const [tab, setTab] = useState<TabId>('courses');
   const [series, setSeries] = useState<Series[]>([]);
+  const [activeGrantId, setActiveGrantId] = useState<string | null>(null);
 
   useEffect(() => {
-    withTimeout(ensureDefaultAdmin(), 8000)
-      .catch(() => undefined)
-      .finally(() => setChecking(false));
-    listSeries()
-      .then(setSeries)
-      .catch(() => undefined);
+    const unsub = watchAuth(async (uid) => {
+      if (!uid) {
+        setProfile(null);
+        setChecking(false);
+        return;
+      }
+      try {
+        const p = await loadProfile(uid);
+        if (!p || p.enabled === false) {
+          await logoutAdmin();
+          setProfile(null);
+        } else {
+          setProfile(p);
+          setActiveGrantId(p.superAdmin && !p.grants.length ? '__super' : p.grants[0]?.id ?? null);
+          setTab(TABS_BY_ROLE[p.role][0]);
+        }
+      } catch {
+        setProfile(null);
+      } finally {
+        setChecking(false);
+      }
+    });
+    return unsub;
   }, []);
 
-  const reloadSeries = useCallback(() => {
+  useEffect(() => {
+    if (!profile) return;
     listSeries()
       .then(setSeries)
       .catch(() => undefined);
-  }, []);
+  }, [profile]);
+
+  const reloadSeries = () => {
+    listSeries()
+      .then(setSeries)
+      .catch(() => undefined);
+  };
 
   const switchGrant = (id: string) => {
     if (!profile) return;
     const next = applyActive(profile, id);
     setProfile(next);
     setActiveGrantId(id);
-    saveSession(next, id);
     setTab(TABS_BY_ROLE[next.role][0]);
   };
 
   const handleSignedIn = (p: AdminProfile) => {
     setProfile(p);
-    setActiveGrantId(p.superAdmin && !p.grants.length ? '__super' : (p.grants[0]?.id ?? null));
+    setActiveGrantId(p.superAdmin && !p.grants.length ? '__super' : p.grants[0]?.id ?? null);
     setTab(TABS_BY_ROLE[p.role][0]);
-  };
-
-  const handleLogout = () => {
-    clearSession();
-    setProfile(null);
+    reloadSeries();
   };
 
   const tabs = useMemo<TabId[]>(() => (profile ? TABS_BY_ROLE[profile.role] : []), [profile]);
@@ -96,6 +106,28 @@ export default function AdminApp() {
 
   if (checking) return <p className="hint">載入中…</p>;
 
+  if (profile?.pending) {
+    return (
+      <div className="panel login-panel">
+        <h1>等待核准</h1>
+        <p className="hint">
+          已收到你的申請（{profile.email}）。管理員核准後就能進入後台；核准前請稍候。
+        </p>
+        {profile.request && (
+          <p className="hint">
+            申請內容：{requestLabel(profile.request)}
+            {profile.request.note ? `｜${profile.request.note}` : ''}
+          </p>
+        )}
+        <p style={{ marginTop: 16 }}>
+          <button className="btn" onClick={() => void logoutAdmin()}>
+            登出
+          </button>
+        </p>
+      </div>
+    );
+  }
+
   if (!profile) {
     return <AdminLogin onSignedIn={handleSignedIn} />;
   }
@@ -111,7 +143,7 @@ export default function AdminApp() {
           ))}
         </nav>
         <div className="row-gap">
-          <span className="hint">{profile.name}</span>
+          <span className="hint">{profile.email || profile.name}</span>
           {options.length > 1 ? (
             <select
               className="select switcher"
@@ -128,7 +160,12 @@ export default function AdminApp() {
           ) : (
             <span className="hint">・{roleLabel(profile)}</span>
           )}
-          <button className="btn tiny ghost" onClick={handleLogout}>
+          <button
+            className="btn tiny ghost"
+            onClick={() => {
+              void logoutAdmin();
+            }}
+          >
             登出
           </button>
         </div>
@@ -155,4 +192,10 @@ function grantLabel(g: AdminProfile['grants'][number]): string {
   if (g.role === 'series') return `系列管理員（${g.seriesIds.length} 個系列）`;
   if (g.role === 'region') return `區域窗口（${g.region}）`;
   return `教室窗口（${g.region}／${g.classroom}）`;
+}
+
+function requestLabel(r: NonNullable<AdminProfile['request']>): string {
+  if (r.role === 'series') return '系列管理員';
+  if (r.role === 'region') return `區域窗口（${r.region}）`;
+  return `教室窗口（${r.region}／${r.classroom}）`;
 }

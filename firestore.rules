@@ -1,58 +1,95 @@
 rules_version = '2';
 
 // ============================================================
-// 防君子模式。
-//
-// 本系統沒有伺服器、也沒有 Firebase Auth，所以：
-//   1. 所有寫入都開放 —— 能開網站的人都能用 devtools 改資料。
-//   2. 唯一還留著的限制是 phones（登入索引）不能整批列舉，
-//      知道完整代碼或手機才查得到一筆。
-//
-// 這份是「逐集合」版本：新增集合就要在這裡加一條。
-// 若改成 match /{document=**} { allow read, write: if true; } 也行，
-// 但會連 phones 的不可列舉一起開放，兩者實際差異很小（名單本來
-// 就能透過 regions/{region}/students 列出）。
-//
-// 要真正的防護，只能把寫入移到伺服器（Vercel Function / Cloud
-// Functions + Admin SDK），屆時把這裡改成 allow write: if false;
+// 管理端使用 Firebase Auth（電子郵件＋密碼）
+//   - 只有 admins/{uid} 存在、enabled、且非 pending 的人能改資料
+//   - 學員端維持免登入：課程、名單、系列、設定可讀；進度可讀可寫
+//   - 首次建立總管理員靠 config/admin_root 標記（貼完規則請立刻建立）
 // ============================================================
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    function signedIn() {
+      return request.auth != null;
+    }
+    function adminDoc() {
+      return get(/databases/$(database)/documents/admins/$(request.auth.uid)).data;
+    }
+    function isAdmin() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+        && adminDoc().enabled == true
+        && adminDoc().pending != true;
+    }
+    function isSuper() {
+      return isAdmin() && adminDoc().superAdmin == true;
+    }
+    function bootstrapped() {
+      return exists(/databases/$(database)/documents/config/admin_root);
+    }
+
+    // 管理員名單
+    match /admins/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
+
+      // 自助註冊：只能建立自己的、且必須是「待核准、無權限」
+      // 例外：尚未 bootstrap 時，允許建立第一位總管理員
+      allow create: if signedIn() && request.auth.uid == uid && (
+        (
+          request.resource.data.superAdmin == false
+          && request.resource.data.pending == true
+          && request.resource.data.enabled == false
+          && request.resource.data.grants.size() == 0
+        )
+        || (
+          !bootstrapped()
+          && request.resource.data.superAdmin == true
+        )
+      );
+
+      allow update, delete: if isSuper();
+    }
+
+    // 首次建立總管理員的標記
+    match /config/admin_root {
+      allow read: if true;
+      allow create: if signedIn() && !bootstrapped();
+      allow update, delete: if false;
+    }
+
     match /courses/{courseId} {
-      allow read, write: if true;
+      allow read: if true;
+      allow write: if isAdmin();
     }
 
-    // 系列課程
     match /series/{seriesId} {
-      allow read, write: if true;
+      allow read: if true;
+      allow write: if isAdmin();
     }
 
-    // 系統設定（訪客瀏覽開關）
     match /config/{docId} {
-      allow read, write: if true;
+      allow read: if true;
+      allow write: if isAdmin();
     }
 
-    // 管理員帳號與密碼
-    match /admins/{account} {
-      allow read, write: if true;
-    }
-
-    // 登入索引：只能單筆取，不能列舉
+    // 登入索引：學員要能單筆查（知道代碼或手機），不能列舉
     match /phones/{key} {
       allow get: if true;
-      allow list: if false;
-      allow write: if true;
+      allow list: if isAdmin();
+      allow write: if isAdmin();
     }
 
     match /regions/{region} {
-      allow read, write: if true;
+      allow read: if true;
+      allow write: if isAdmin();
     }
 
     match /regions/{region}/students/{studentId} {
-      allow read, write: if true;
+      allow read: if true;
+      allow write: if isAdmin();
     }
 
+    // 學習進度：學員端寫入，維持開放（防君子）
     match /regions/{region}/students/{studentId}/progress/{courseId} {
       allow read, write: if true;
     }

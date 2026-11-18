@@ -1,11 +1,14 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+﻿import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   addGrant,
+  approveAdmin,
   createAdmin,
   listAdmins,
+  listPendingAdmins,
+  rejectAdmin,
   removeAdmin,
   removeGrant,
-  resetAdminPassword,
+  sendResetEmail,
   setAdminEnabled,
 } from '../../lib/admins';
 import { REGIONS } from '../../lib/regions';
@@ -32,23 +35,27 @@ export default function AdminTab({ profile, series }: Props) {
   const [ok, setOk] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const [account, setAccount] = useState('');
+  const [email, setEmail] = useState('');
   const [name, setName] = useState('');
   const [pass, setPass] = useState('');
   const [superAdmin, setSuperAdmin] = useState(false);
   const [grant, setGrant] = useState<GrantDraft>(emptyGrant());
 
   const [editingGrants, setEditingGrants] = useState<string | null>(null);
-  const [resetting, setResetting] = useState<string | null>(null);
-  const [newPass, setNewPass] = useState('');
+  const [pending, setPending] = useState<AdminProfile[] | null>(null);
 
   const reload = useCallback(() => {
     listAdmins()
-      .then(setAdmins)
+      .then((all) => {
+        setAdmins(all);
+      })
       .catch((e: unknown) => {
         setAdmins([]);
         setError('讀取管理員失敗：' + (e as Error).message);
       });
+    listPendingAdmins()
+      .then(setPending)
+      .catch(() => setPending([]));
   }, []);
 
   useEffect(() => {
@@ -70,14 +77,14 @@ export default function AdminTab({ profile, series }: Props) {
     setOk(null);
     try {
       await createAdmin({
-        account,
+        email,
         name,
         pass,
         superAdmin,
         grants: superAdmin ? [] : [grant],
       });
-      setOk(`已建立「${account}」。`);
-      setAccount('');
+      setOk(`已建立「${email}」，並寄出帳號開通說明。`);
+      setEmail('');
       setName('');
       setPass('');
       setSuperAdmin(false);
@@ -112,6 +119,64 @@ export default function AdminTab({ profile, series }: Props) {
       {error && <p className="form-error">{error}</p>}
       {ok && <p className="form-ok">{ok}</p>}
 
+      {isSuper && pending && pending.length > 0 && (
+        <div className="panel" style={{ marginBottom: 16 }}>
+          <h3>待核准申請（{pending.length}）</h3>
+          <div className="table-scroll">
+            <table className="admin-table">
+              <thead>
+                <tr>
+                  <th>電子郵件</th>
+                  <th>姓名</th>
+                  <th>申請權限</th>
+                  <th>備註</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {pending.map((p) => (
+                  <tr key={p.account}>
+                    <td className="mono">{p.email}</td>
+                    <td>{p.name}</td>
+                    <td>{p.request ? requestLabel(p.request) : '未填寫'}</td>
+                    <td className="hint">{p.request?.note ?? ''}</td>
+                    <td className="ta-right">
+                      <button
+                        className="btn tiny primary"
+                        onClick={() => {
+                          approveAdmin(p.account)
+                            .then(() => {
+                              setOk(`已核准 ${p.email}。`);
+                              reload();
+                            })
+                            .catch((e: unknown) => setError((e as Error).message));
+                        }}
+                      >
+                        核准
+                      </button>
+                      <button
+                        className="btn tiny ghost danger"
+                        onClick={() => {
+                          if (!window.confirm(`拒絕並刪除 ${p.email} 的申請？`)) return;
+                          rejectAdmin(p.account)
+                            .then(() => {
+                              setOk(`已拒絕 ${p.email}。`);
+                              reload();
+                            })
+                            .catch((e: unknown) => setError((e as Error).message));
+                        }}
+                      >
+                        拒絕
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       <div className="panel">
         <h3>現有帳號</h3>
         {admins === null ? (
@@ -123,7 +188,7 @@ export default function AdminTab({ profile, series }: Props) {
             <table className="admin-table">
               <thead>
                 <tr>
-                  <th>帳號</th>
+                  <th>電子郵件</th>
                   <th>姓名</th>
                   <th>權限</th>
                   <th>狀態</th>
@@ -133,7 +198,7 @@ export default function AdminTab({ profile, series }: Props) {
               <tbody>
                 {visible.map((a) => (
                   <tr key={a.account}>
-                    <td className="mono">{a.account}</td>
+                    <td className="mono">{a.email}</td>
                     <td>{a.name}</td>
                     <td>
                       <span className="grant-list">{summarize(a, series).join('、')}</span>
@@ -164,16 +229,19 @@ export default function AdminTab({ profile, series }: Props) {
                           <button
                             className="btn tiny"
                             onClick={() => {
-                              setResetting(a.account);
-                              setNewPass('');
+                              if (!window.confirm(`寄送密碼重設信到「${a.email}」？`)) return;
+                              sendResetEmail(a.email)
+                                .then(() => setOk(`已寄出重設信到 ${a.email}。`))
+                                .catch((e: unknown) => setError((e as Error).message));
                             }}
                           >
-                            改密碼
+                            重設密碼
                           </button>
                           <button
                             className="btn tiny ghost danger"
                             onClick={() => {
-                              if (!window.confirm(`移除「${a.account}」？`)) return;
+                              if (!window.confirm(`移除「${a.email}」的管理權限？（登入帳號仍存在，但無法進入後台）`))
+                                return;
                               removeAdmin(a.account)
                                 .then(reload)
                                 .catch((e: unknown) => setError((e as Error).message));
@@ -212,41 +280,18 @@ export default function AdminTab({ profile, series }: Props) {
             onClose={() => setEditingGrants(null)}
           />
         )}
-
-        {resetting && (
-          <div className="inline-form">
-            <span className="hint">新密碼</span>
-            <input className="input" value={newPass} onChange={(e) => setNewPass(e.target.value)} />
-            <button
-              className="btn primary small"
-              onClick={() => {
-                resetAdminPassword(resetting, newPass)
-                  .then(() => {
-                    setResetting(null);
-                    setNewPass('');
-                    reload();
-                  })
-                  .catch((e: unknown) => setError((e as Error).message));
-              }}
-            >
-              確認
-            </button>
-            <button className="btn small ghost" onClick={() => setResetting(null)}>
-              取消
-            </button>
-          </div>
-        )}
       </div>
 
       <div className="panel" style={{ marginTop: 16 }}>
         <h3>{isSuper ? '新增管理員' : '新增教室窗口'}</h3>
         <form onSubmit={submit} className="form-grid">
           <label className="field">
-            <span>帳號（英數字）</span>
+            <span>電子郵件（登入帳號）</span>
             <input
-              className="input mono"
-              value={account}
-              onChange={(e) => setAccount(e.target.value)}
+              className="input"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
               placeholder="例：tn01"
               required
             />
@@ -442,9 +487,16 @@ function grantText(g: AdminGrant, series: Series[]): string {
 
 function summarize(a: AdminProfile, series: Series[]): string[] {
   const out: string[] = [];
+  if (a.pending) out.push('待核准');
   if (a.superAdmin) out.push('總管理員');
   for (const g of a.grants) out.push(grantText(g, series));
   return out.length ? out : ['無權限'];
+}
+
+function requestLabel(r: NonNullable<AdminProfile['request']>): string {
+  if (r.role === 'series') return '系列管理員';
+  if (r.role === 'region') return `區域窗口（${r.region}）`;
+  return `教室窗口（${r.region}／${r.classroom}）`;
 }
 
 export const _role = (r: AdminRole) => r;

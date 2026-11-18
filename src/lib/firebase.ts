@@ -1,11 +1,11 @@
 import { initializeApp } from 'firebase/app';
+import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 
 /**
- * Firebase Web App 設定。這些值出現在前端是正常的（apiKey 不是機密）。
+ * Firebase 設定。這些值出現在前端是正常的（apiKey 不是機密）。
  *
- * 注意：本系統不使用 Firebase Auth。管理權限由前端密碼畫面區分，
- * 資料庫規則為防君子模式，詳見 firestore.rules 的說明。
+ * 管理端使用 Firebase Auth（電子郵件＋密碼）；學員端不使用登入。
  */
 export const firebaseConfig = {
   apiKey: 'AIzaSyCCcc4f30Yxlvsw5pJqoGzmYQ549JPZ6Q0',
@@ -17,4 +17,5 @@ export const firebaseConfig = {
 };
 
 export const app = initializeApp(firebaseConfig);
+export const auth = getAuth(app);
 export const db = getFirestore(app);
