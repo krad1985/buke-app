@@ -101,9 +101,13 @@ npm run deploy
 
 ## 安全模型
 
-- 沒有伺服器端驗證，規則全開；能開網站的人都可以用 devtools 讀寫。
-- 角色與範圍只是畫面層的區分，不是權限隔離。
-- 既有緩解：課程可匯出／匯入備份（JSON）。
+- 管理端：Firebase Auth（電子郵件＋密碼）。名單讀寫依「區域／教室」分區，伺服器端攔阻。
+- 學員端：免登入，讀取不含電話的公開投影（`rosterPublic`）。
+- 學習進度：匿名可讀寫（防君子）。
+- 稽核：管理端操作寫入 `auditLogs`（只增不改）。
+- **App Check 未啟用**：Firebase Console 目前只接受 reCAPTCHA Enterprise（Google Cloud Fraud Defense），
+  需另開 Cloud 專案與金鑰；對本專案規模效益不大，暫不處理。若日後需要，
+  可在 `firebase.ts` 加 `initializeAppCheck` + `ReCaptchaEnterpriseProvider`。
 
 ## 已知限制
 
