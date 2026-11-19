@@ -26,12 +26,17 @@ export const db = getFirestore(app);
  * - provider 'enterprise'：reCAPTCHA Enterprise（Google Cloud Fraud Defense），新建議用這個
  * 注意：Firebase Console 的 App Check 要先切到「強制執行」才會真的擋請求。
  */
-export const APP_CHECK_SITE_KEY = '';
+export const APP_CHECK_SITE_KEY = '6LcR7ScuAAAAAFeuGqXsyOY5gnC9mPxybluF5BlA';
 export const APP_CHECK_PROVIDER: 'v3' | 'enterprise' = 'v3';
 
 export async function initAppCheck(): Promise<void> {
   if (!APP_CHECK_SITE_KEY) return;
   try {
+    // 本機測試若需要 debug token：先 localStorage.setItem('buke.appcheck.debug', '<token>') 再重新整理
+    if (import.meta.env.DEV) {
+      const dbg = localStorage.getItem('buke.appcheck.debug');
+      if (dbg) (self as unknown as Record<string, string>).FIREBASE_APPCHECK_DEBUG_TOKEN = dbg;
+    }
     if (APP_CHECK_PROVIDER === 'enterprise') {
       const { initializeAppCheck, ReCaptchaEnterpriseProvider } = await import('firebase/app-check');
       initializeAppCheck(app, {
