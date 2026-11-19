@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+﻿import { useCallback, useEffect, useMemo, useState } from 'react';
 import { downloadCsv } from '../../lib/csv';
 import {
   deleteStudent,
@@ -41,7 +41,7 @@ export default function StudentTab({ profile, series }: { profile: AdminProfile;
       return;
     }
     setStudents(null);
-    listStudentsInRegion(region)
+    listStudentsInRegion(region, fixedClassroom || undefined)
       .then((list) => {
         setStudents(list);
         setSelected([]);

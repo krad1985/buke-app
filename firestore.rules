@@ -138,8 +138,27 @@ service cloud.firestore {
       allow read: if true;
       allow write: if isAdmin();
     }
-
+    // 名單：只有管理員可讀，且限自己區；教室窗口再細到自己的教室
     match /regions/{region}/students/{studentId} {
+      allow get, list: if isAdmin() && (
+        isSuper()
+        || myAdmin().get('managedRegions', []).hasAny([region])
+        || resource.data.get('classroomKey', '') in myAdmin().get('classroomScopes', [])
+      );
+      allow create, update: if isAdmin() && (
+        isSuper()
+        || myAdmin().get('managedRegions', []).hasAny([region])
+        || request.resource.data.get('classroomKey', '') in myAdmin().get('classroomScopes', [])
+      );
+      allow delete: if isAdmin() && (
+        isSuper()
+        || myAdmin().get('managedRegions', []).hasAny([region])
+        || resource.data.get('classroomKey', '') in myAdmin().get('classroomScopes', [])
+      );
+    }
+
+    // 學員端用的公開投影（不含電話）
+    match /rosterPublic/{region}/students/{studentId} {
       allow read: if true;
       allow write: if isAdmin();
     }

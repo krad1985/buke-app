@@ -24,6 +24,14 @@ const adminRef = (uid: string) => doc(db, 'admins', uid);
 
 const rid = () => Math.random().toString(36).slice(2, 8);
 
+/** 由 grants 推導給規則用的兩個索引 */
+const scopesOf = (grants: Pick<AdminGrant, 'role' | 'region' | 'classroom'>[]) => ({
+  managedRegions: [...new Set(grants.map((g) => g.region).filter(Boolean))],
+  classroomScopes: grants
+    .filter((g) => g.role === 'classroom' && g.classroom)
+    .map((g) => g.region + '/' + g.classroom),
+});
+
 export function applyActive(profile: AdminProfile, activeGrantId: string | null): AdminProfile {
   if (profile.superAdmin && (activeGrantId === '__super' || !profile.grants.length)) {
     return { ...profile, role: 'super', region: '', classroom: '', seriesIds: [] };
@@ -68,6 +76,10 @@ export function normalizeProfile(raw: Record<string, unknown>, activeGrantId: st
     ];
   }
 
+  const classroomScopes = Array.isArray(raw.classroomScopes)
+    ? (raw.classroomScopes as string[])
+    : grants.filter((g) => g.role === 'classroom' && g.classroom).map((g) => g.region + '/' + g.classroom);
+
   const managedRegions = Array.isArray(raw.managedRegions)
     ? (raw.managedRegions as string[])
     : [...new Set(grants.map((g) => g.region).filter(Boolean))];
@@ -81,6 +93,7 @@ export function normalizeProfile(raw: Record<string, unknown>, activeGrantId: st
     request: (raw.request as AdminRequest | undefined) ?? undefined,
     createdAt: typeof raw.createdAt === 'number' ? raw.createdAt : 0,
     managedRegions,
+    classroomScopes,
     superAdmin,
     grants,
     role: 'super',
@@ -131,6 +144,7 @@ export async function bootstrapAdmin(email: string, pass: string, name: string):
     superAdmin: true,
     grants: [],
     managedRegions: [],
+    classroomScopes: [],
     enabled: true,
     createdAt: Date.now(),
   });
@@ -194,7 +208,7 @@ export async function createAdmin(input: NewAdminInput): Promise<void> {
     name: input.name.trim() || input.email.trim(),
     superAdmin: input.superAdmin,
     grants: input.grants.map((g) => ({ ...g, id: rid() })),
-    managedRegions: [...new Set(input.grants.map((g) => g.region).filter(Boolean))],
+    ...scopesOf(input.grants),
     enabled: true,
     createdAt: Date.now(),
   });
@@ -222,6 +236,7 @@ export async function registerAdmin(
     superAdmin: false,
     grants: [],
     managedRegions: [],
+    classroomScopes: [],
     enabled: false,
     pending: true,
     request,
@@ -255,7 +270,7 @@ export async function approveAdmin(account: string): Promise<void> {
 
   await updateDoc(adminRef(account), {
     grants: [grant],
-    managedRegions: [grant.region].filter(Boolean),
+    ...scopesOf([grant]),
     enabled: true,
     pending: false,
     approvedAt: Date.now(),
@@ -289,7 +304,7 @@ export async function addGrant(account: string, grant: Omit<AdminGrant, 'id'>): 
   const profile = normalizeProfile({ ...(snap.data() as Record<string, unknown>), account });
   await updateDoc(adminRef(account), {
     grants: [...profile.grants, { ...grant, id: rid() }],
-    managedRegions: [...new Set([...profile.grants, grant].map((g) => g.region).filter(Boolean))],
+    ...scopesOf([...profile.grants, grant]),
     updatedAt: Date.now(),
   });
   logEvent({ action: 'admin.grant_add', target: profile.email, detail: { role: grant.role, region: grant.region, classroom: grant.classroom } });
@@ -305,7 +320,7 @@ export async function removeGrant(account: string, grantId: string): Promise<voi
   }
   await updateDoc(adminRef(account), {
     grants,
-    managedRegions: [...new Set(grants.map((g) => g.region).filter(Boolean))],
+    ...scopesOf(grants),
     updatedAt: Date.now(),
   });
   logEvent({ action: 'admin.grant_remove', target: profile.email, detail: { grantId } });

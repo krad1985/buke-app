@@ -122,6 +122,8 @@ export interface AdminProfile {
   createdAt?: number;
   /** 由 grants 推導：可管理的區域（給規則判斷用） */
   managedRegions?: string[];
+  /** 由 grants 推導：可管理的教室，格式「區域/教室」（給規則判斷用） */
+  classroomScopes?: string[];
   /** 總管理員：全權，不需要 grants */
   superAdmin: boolean;
   /** 可切換的身分 */

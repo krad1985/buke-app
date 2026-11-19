@@ -1,11 +1,13 @@
-import {
+﻿import {
   arrayUnion,
   collection,
   deleteDoc,
   doc,
   getDoc,
   getDocs,
+  query,
   setDoc,
+  where,
   writeBatch,
 } from 'firebase/firestore';
 import { db } from './firebase';
@@ -44,6 +46,30 @@ export function toLookupKey(input: string): string {
 const studentDoc = (region: string, studentId: string) =>
   doc(db, 'regions', region, 'students', studentId);
 
+/** 公開投影：學員端（未登入）只能讀這份，不含電話與其他原始欄位 */
+const publicDoc = (region: string, studentId: string) =>
+  doc(db, 'rosterPublic', region, 'students', studentId);
+
+const classroomKeyOf = (region: string, classroom: string) => region + '/' + classroom;
+
+const publicPayload = (s: {
+  studentId: string;
+  name: string;
+  region: string;
+  classroom: string;
+  groupLarge: string;
+  groupSmall: string;
+  role: string;
+}) => ({
+  studentId: s.studentId,
+  name: s.name,
+  region: s.region,
+  classroom: s.classroom,
+  groupLarge: s.groupLarge,
+  groupSmall: s.groupSmall,
+  role: s.role,
+});
+
 /**
  * 登入索引放在 phones 集合（學員代碼與手機都放這裡）。
  * 沿用既有集合名稱，避免為了新增集合而重貼規則。
@@ -60,7 +86,7 @@ export async function findStudentByLogin(input: string): Promise<Student | null>
   const region = data.region ?? '';
   const studentId = data.studentId ?? key;
   if (!region) return null;
-  const snap = await getDoc(studentDoc(region, studentId));
+  const snap = await getDoc(publicDoc(region, studentId));
   if (!snap.exists()) return null;
   return normalizeStudent({ ...(snap.data() as Student), studentId: snap.id, region });
 }
@@ -75,8 +101,19 @@ function normalizeStudent(s: Student): Student {
   };
 }
 
-export async function listStudentsInRegion(region: string): Promise<Student[]> {
-  const snap = await getDocs(collection(db, 'regions', region, 'students'));
+export async function listStudentsInRegion(region: string, classroom?: string): Promise<Student[]> {
+  const base = collection(db, 'regions', region, 'students');
+  const snap = await getDocs(
+    classroom ? query(base, where('classroomKey', '==', classroomKeyOf(region, classroom))) : base
+  );
+  return snap.docs
+    .map((d) => normalizeStudent({ ...(d.data() as Student), studentId: d.id, region }))
+    .sort((a, b) => a.studentId.localeCompare(b.studentId));
+}
+
+/** 學員端用：讀公開投影（不含電話） */
+export async function listPublicStudentsInRegion(region: string): Promise<Student[]> {
+  const snap = await getDocs(collection(db, 'rosterPublic', region, 'students'));
   return snap.docs
     .map((d) => normalizeStudent({ ...(d.data() as Student), studentId: d.id, region }))
     .sort((a, b) => a.studentId.localeCompare(b.studentId));
@@ -85,8 +122,14 @@ export async function listStudentsInRegion(region: string): Promise<Student[]> {
 export async function saveStudent(student: Student, previousPhone?: string): Promise<void> {
   await setDoc(studentDoc(student.region, student.studentId), {
     ...student,
+    classroomKey: classroomKeyOf(student.region, student.classroom),
     updatedAt: Date.now(),
   });
+  await setDoc(
+    publicDoc(student.region, student.studentId),
+    { ...publicPayload(student), seriesIds: student.seriesIds ?? [] },
+    { merge: true }
+  );
   await writeIndexes(student);
 
   const oldPhone = normalizePhone(previousPhone ?? '');
@@ -118,6 +161,7 @@ export async function deleteStudent(region: string, studentId: string): Promise<
     await batch.commit();
   }
   await deleteDoc(studentDoc(region, studentId));
+  await deleteDoc(publicDoc(region, studentId)).catch(() => undefined);
   await deleteDoc(indexDoc(studentId)).catch(() => undefined);
   if (phone) await deleteDoc(indexDoc(phone)).catch(() => undefined);
 }
@@ -340,6 +384,7 @@ export async function importRoster(
           phone: row.phone || '',
           region,
           classroom: options.classroom || row.classroom,
+          classroomKey: classroomKeyOf(region, options.classroom || row.classroom),
           groupLarge: row.groupLarge,
           groupSmall: row.groupSmall,
           role: row.role,
@@ -351,6 +396,22 @@ export async function importRoster(
       );
       batch.set(indexDoc(studentId), index, { merge: true });
       if (row.phone) batch.set(indexDoc(row.phone), index, { merge: true });
+      batch.set(
+        publicDoc(region, studentId),
+        {
+          ...publicPayload({
+            studentId,
+            name: row.name,
+            region,
+            classroom: options.classroom || row.classroom,
+            groupLarge: row.groupLarge,
+            groupSmall: row.groupSmall,
+            role: row.role,
+          }),
+          ...(options.seriesId ? { seriesIds: arrayUnion(options.seriesId) } : {}),
+        },
+        { merge: true }
+      );
       created += 1;
     }
     await batch.commit();

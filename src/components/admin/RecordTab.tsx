@@ -51,7 +51,7 @@ export default function RecordTab({ profile, series }: Props) {
     setBusy(true);
     setError(null);
     try {
-      const students = await listStudentsInRegion(region);
+      const students = await listStudentsInRegion(region, fixedClassroom || undefined);
       const scoped = fixedClassroom
         ? students.filter((s) => s.classroom === fixedClassroom)
         : students;

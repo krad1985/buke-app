@@ -3,7 +3,7 @@ import { fmtDuration, fmtTime, segmentSeconds } from '../lib/format';
 import { IconPause, IconPlay, IconUsers } from './Icons';
 import { createPlayer, type PlayerHandle } from '../lib/player';
 import { courseVideo } from '../lib/video';
-import { listStudentsInRegion } from '../lib/roster';
+import { listPublicStudentsInRegion } from '../lib/roster';
 import { loadCourseProgresses } from '../lib/progressRepo';
 import type { AnswerRecord, Course, CourseProgress, Segment, Student } from '../types';
 import QuizPanel, { type QuizResult } from './QuizPanel';
@@ -242,7 +242,7 @@ export default function LessonView({ course, initialProgress, onSaveProgress, on
       return;
     }
     let alive = true;
-    listStudentsInRegion(student.region)
+    listPublicStudentsInRegion(student.region)
       .then((list) => {
         if (!alive) return;
         const same = list.filter(
@@ -267,7 +267,7 @@ export default function LessonView({ course, initialProgress, onSaveProgress, on
     setPeers(null);
     peersPanelRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     try {
-      const list = await listStudentsInRegion(student.region);
+      const list = await listPublicStudentsInRegion(student.region);
       const same = list.filter(
         (s) =>
           s.groupLarge === student.groupLarge &&
