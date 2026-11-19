@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { authMessage, loginAdmin, registerAdmin } from '../../lib/admins';
+import { listSeries } from '../../lib/series';
 import { REGIONS } from '../../lib/regions';
-import type { AdminProfile, AdminRequest } from '../../types';
+import type { AdminProfile, AdminRequest, Series } from '../../types';
 
 export default function AdminLogin({ onSignedIn }: { onSignedIn: (p: AdminProfile) => void }) {
   const [mode, setMode] = useState<'login' | 'register'>('login');
@@ -18,6 +19,13 @@ export default function AdminLogin({ onSignedIn }: { onSignedIn: (p: AdminProfil
   const [error, setError] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [seriesList, setSeriesList] = useState<Series[]>([]);
+
+  useEffect(() => {
+    listSeries()
+      .then(setSeriesList)
+      .catch(() => undefined);
+  }, []);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -115,6 +123,34 @@ export default function AdminLogin({ onSignedIn }: { onSignedIn: (p: AdminProfil
                   placeholder="例：201"
                 />
               </label>
+            )}
+            {request.role === 'series' && (
+              <div className="field span2">
+                <span>申請的系列</span>
+                <div className="checkline span2">
+                  {seriesList.length === 0 ? (
+                    <span className="hint">尚未建立系列</span>
+                  ) : (
+                    seriesList.map((s) => (
+                      <label key={s.seriesId} className="checkline">
+                        <input
+                          type="checkbox"
+                          checked={request.seriesIds.includes(s.seriesId)}
+                          onChange={() =>
+                            setRequest({
+                              ...request,
+                              seriesIds: request.seriesIds.includes(s.seriesId)
+                                ? request.seriesIds.filter((x) => x !== s.seriesId)
+                                : [...request.seriesIds, s.seriesId],
+                            })
+                          }
+                        />
+                        <span>{s.name}</span>
+                      </label>
+                    ))
+                  )}
+                </div>
+              </div>
             )}
             <label className="field">
               <span>備註（給核准的人看）</span>

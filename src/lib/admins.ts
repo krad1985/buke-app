@@ -79,6 +79,7 @@ export function normalizeProfile(raw: Record<string, unknown>, activeGrantId: st
     enabled: raw.enabled !== false,
     pending: raw.pending === true,
     request: (raw.request as AdminRequest | undefined) ?? undefined,
+    createdAt: typeof raw.createdAt === 'number' ? raw.createdAt : 0,
     managedRegions,
     superAdmin,
     grants,
@@ -269,7 +270,9 @@ export async function rejectAdmin(account: string): Promise<void> {
 
 export async function listPendingAdmins(): Promise<AdminProfile[]> {
   const all = await listAdmins();
-  return all.filter((a) => a.pending === true);
+  return all
+    .filter((a) => a.pending === true)
+    .sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
 }
 
 export async function listAdmins(): Promise<AdminProfile[]> {
