@@ -33,7 +33,8 @@ export async function initAppCheck(): Promise<void> {
   if (!APP_CHECK_SITE_KEY) return;
   try {
     // 本機測試若需要 debug token：先 localStorage.setItem('buke.appcheck.debug', '<token>') 再重新整理
-    if (import.meta.env.DEV) {
+    const isDev = (import.meta as unknown as { env?: { DEV?: boolean } }).env?.DEV === true;
+    if (isDev) {
       const dbg = localStorage.getItem('buke.appcheck.debug');
       if (dbg) (self as unknown as Record<string, string>).FIREBASE_APPCHECK_DEBUG_TOKEN = dbg;
     }
