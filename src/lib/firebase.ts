@@ -19,3 +19,22 @@ export const firebaseConfig = {
 export const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
+
+/**
+ * App Check（reCAPTCHA v3）：填入 site key 後生效；留空則不啟用。
+ * 注意：Console 的 App Check 要先切到「強制執行」才會真的擋請求。
+ */
+export const APP_CHECK_SITE_KEY = '';
+
+export async function initAppCheck(): Promise<void> {
+  if (!APP_CHECK_SITE_KEY) return;
+  try {
+    const { initializeAppCheck, ReCaptchaV3Provider } = await import('firebase/app-check');
+    initializeAppCheck(app, {
+      provider: new ReCaptchaV3Provider(APP_CHECK_SITE_KEY),
+      isTokenAutoRefreshEnabled: true,
+    });
+  } catch {
+    /* 初始化失敗不影響網站運作 */
+  }
+}
