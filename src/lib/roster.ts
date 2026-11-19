@@ -351,6 +351,29 @@ export interface ImportResult {
   duplicates: string[];
 }
 
+/** 補齊既有名單的公開投影與 classroomKey（一次性） */
+export async function backfillRosters(): Promise<number> {
+  const regionSnap = await getDocs(collection(db, 'regions'));
+  let total = 0;
+  for (const r of regionSnap.docs) {
+    const students = await listStudentsInRegion(r.id);
+    for (const s of students) {
+      await setDoc(
+        studentDoc(r.id, s.studentId),
+        { classroomKey: classroomKeyOf(r.id, s.classroom) },
+        { merge: true }
+      );
+      await setDoc(
+        publicDoc(r.id, s.studentId),
+        { ...publicPayload({ ...s, region: r.id }), seriesIds: s.seriesIds ?? [] },
+        { merge: true }
+      );
+      total += 1;
+    }
+  }
+  return total;
+}
+
 export interface ImportOptions {
   /** 指定系列（會被加入學員的 seriesIds，不覆蓋既有系列） */
   seriesId?: string;

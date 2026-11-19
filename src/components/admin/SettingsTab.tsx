@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { loadSettings, saveSettings } from '../../lib/settings';
+import { backfillRosters } from '../../lib/roster';
 import { logEvent } from '../../lib/audit';
 import type { AppSettings } from '../../types';
 
@@ -50,6 +51,30 @@ export default function SettingsTab() {
         )}
         {message && <p className="form-ok">{message}</p>}
         {error && <p className="form-error">{error}</p>}
+      </div>
+
+      <div className="panel" style={{ marginTop: 16 }}>
+        <h3>補齊名單資料</h3>
+        <p className="hint">
+          舊名單補上「教室索引」與「公開投影」（不含電話）。換版後學員端讀的是公開投影，
+          若有人登入後看不到資料，按一次這個就好。
+        </p>
+        <button
+          className="btn"
+          onClick={async () => {
+            setMessage(null);
+            setError(null);
+            try {
+              const n = await backfillRosters();
+              logEvent({ action: 'roster.import', target: 'backfill', detail: { count: n } });
+              setMessage(`已補齊 ${n} 筆。`);
+            } catch (e) {
+              setError('補齊失敗：' + (e as Error).message);
+            }
+          }}
+        >
+          執行補齊
+        </button>
       </div>
     </div>
   );
