@@ -86,7 +86,7 @@ export default function CourseEditor({ course, series, onSaved, onCancel }: Prop
             passRule: 'allCorrect',
             maxAttempts: 0,
             onFailAction: 'retryQuiz',
-            showAnswerAfterFail: true,
+            showAnswerAfterFail: false,
             questions: [
               {
                 qid: `q-${Date.now().toString(36)}`,

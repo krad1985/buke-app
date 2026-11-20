@@ -39,7 +39,8 @@ export default function TimecodePicker({ video, onTick }: Props) {
         setReady(true);
         onTick(0, d);
       },
-      onStateChange: () => setPlaying(true),
+      onStateChange: (isPlaying) => setPlaying(isPlaying),
+      onEnded: () => setPlaying(false),
       onError: (message) => setError(message),
     })
       .then((handle) => {

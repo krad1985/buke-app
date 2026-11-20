@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { loadSettings, saveSettings } from '../../lib/settings';
 import { backfillRosters } from '../../lib/roster';
+import { repairAdminScopes } from '../../lib/admins';
 import { logEvent } from '../../lib/audit';
 import type { AppSettings } from '../../types';
 
@@ -74,6 +75,25 @@ export default function SettingsTab() {
           }}
         >
           執行補齊
+        </button>
+
+        <p className="hint" style={{ marginTop: 16 }}>
+          舊的管理員帳號缺少「區域／教室索引」，教室窗口會讀不到名單。按一次重建即可。
+        </p>
+        <button
+          className="btn"
+          onClick={async () => {
+            setMessage(null);
+            setError(null);
+            try {
+              const n = await repairAdminScopes();
+              setMessage(`已重建 ${n} 個管理員的權限索引。`);
+            } catch (e) {
+              setError('重建失敗：' + (e as Error).message);
+            }
+          }}
+        >
+          重建管理員索引
         </button>
       </div>
     </div>

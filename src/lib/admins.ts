@@ -297,6 +297,18 @@ export async function listAdmins(): Promise<AdminProfile[]> {
     .sort((a, b) => a.email.localeCompare(b.email));
 }
 
+/** 一次性：把 managedRegions / classroomScopes 補寫回管理員文件（舊資料沒有） */
+export async function repairAdminScopes(): Promise<number> {
+  const all = await listAdmins();
+  let n = 0;
+  for (const a of all) {
+    const scopes = scopesOf(a.grants);
+    await updateDoc(adminRef(a.account), { ...scopes, updatedAt: Date.now() });
+    n += 1;
+  }
+  return n;
+}
+
 export async function addGrant(account: string, grant: Omit<AdminGrant, 'id'>): Promise<void> {
   validateGrant(grant);
   const snap = await getDoc(adminRef(account));

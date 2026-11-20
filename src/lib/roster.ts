@@ -24,21 +24,45 @@ export function isValidCode(code: string): boolean {
 }
 
 export function normalizePhone(input: string): string {
-  // 去掉 Excel 文字前置符號（' ’ " `）與所有非數字
-  let d = (input ?? '').replace(/^[\s'’"`]+/, '').replace(/[^\d]/g, '');
-  if (d.startsWith('886')) d = '0' + d.slice(3);
-  return d;
+  const keys = phoneCandidates(input);
+  const local = keys.find((k) => /^0\d{8,9}$/.test(k));
+  return local ?? keys[0] ?? '';
 }
 
 export function isValidPhone(key: string): boolean {
-  return /^0\d{8,9}$/.test(key);
+  return /^0\d{8,9}$/.test(key) || /^\d{8,15}$/.test(key);
 }
 
-/** 學員輸入的代碼或手機 → 查詢用的鍵 */
-export function toLookupKey(input: string): string {
+/**
+ * 手機的查詢候選鍵：台灣號碼同時產生「0 開頭」與「886 開頭」兩種，
+ * 國外號碼保留國碼數字。匯入時全部建索引，登入時逐一嘗試。
+ */
+export function phoneCandidates(input: string): string[] {
+  const d = (input ?? '').replace(/[^\d]/g, '');
+  if (!d) return [];
+  const out = new Set<string>();
+  if (d.startsWith('886') && d.length > 3) {
+    out.add('0' + d.slice(3));
+    out.add(d);
+  } else if (d.startsWith('0')) {
+    out.add(d);
+    out.add('886' + d.slice(1));
+  } else {
+    out.add(d);
+  }
+  return [...out];
+}
+
+/** 學員輸入的代碼或手機 → 查詢用的鍵（手機可能有多種寫法） */
+export function lookupKeys(input: string): string[] {
   const t = (input ?? '').trim();
-  if (!t) return '';
-  return /[A-Za-z]/.test(t) ? normalizeCode(t) : normalizePhone(t);
+  if (!t) return [];
+  if (/[A-Za-z]/.test(t)) return [normalizeCode(t)];
+  return phoneCandidates(t);
+}
+
+export function toLookupKey(input: string): string {
+  return lookupKeys(input)[0] ?? '';
 }
 
 /* ---------------- 讀寫 ---------------- */
@@ -76,19 +100,22 @@ const publicPayload = (s: {
  */
 const indexDoc = (key: string) => doc(db, 'phones', key);
 
-/** 用學員代碼或手機登入 */
+/** 用學員代碼或手機登入（手機接受帶不帶國碼） */
 export async function findStudentByLogin(input: string): Promise<Student | null> {
-  const key = toLookupKey(input);
-  if (!key) return null;
-  const idx = await getDoc(indexDoc(key));
-  if (!idx.exists()) return null;
-  const data = idx.data() as { region?: string; studentId?: string };
-  const region = data.region ?? '';
-  const studentId = data.studentId ?? key;
-  if (!region) return null;
-  const snap = await getDoc(publicDoc(region, studentId));
-  if (!snap.exists()) return null;
-  return normalizeStudent({ ...(snap.data() as Student), studentId: snap.id, region });
+  const keys = lookupKeys(input);
+  for (const key of keys) {
+    if (!key) continue;
+    const idx = await getDoc(indexDoc(key));
+    if (!idx.exists()) continue;
+    const data = idx.data() as { region?: string; studentId?: string };
+    const region = data.region ?? '';
+    const studentId = data.studentId ?? key;
+    if (!region) continue;
+    const snap = await getDoc(publicDoc(region, studentId));
+    if (!snap.exists()) continue;
+    return normalizeStudent({ ...(snap.data() as Student), studentId: snap.id, region });
+  }
+  return null;
 }
 
 function normalizeStudent(s: Student): Student {
@@ -132,25 +159,24 @@ export async function saveStudent(student: Student, previousPhone?: string): Pro
   );
   await writeIndexes(student);
 
-  const oldPhone = normalizePhone(previousPhone ?? '');
-  const newPhone = normalizePhone(student.phone ?? '');
-  if (oldPhone && oldPhone !== newPhone) {
-    await deleteDoc(indexDoc(oldPhone)).catch(() => undefined);
+  const oldKeys = phoneCandidates(previousPhone ?? '');
+  const newKeys = phoneCandidates(student.phone ?? '');
+  for (const key of oldKeys) {
+    if (key && !newKeys.includes(key)) await deleteDoc(indexDoc(key)).catch(() => undefined);
   }
 }
 
 async function writeIndexes(student: Student): Promise<void> {
   const base = { region: student.region, name: student.name, studentId: student.studentId };
   await setDoc(indexDoc(student.studentId), base, { merge: true });
-  const phone = normalizePhone(student.phone ?? '');
-  if (phone && isValidPhone(phone)) {
-    await setDoc(indexDoc(phone), base, { merge: true });
+  for (const key of phoneCandidates(student.phone ?? '')) {
+    if (key && isValidPhone(key)) await setDoc(indexDoc(key), base, { merge: true });
   }
 }
 
 export async function deleteStudent(region: string, studentId: string): Promise<void> {
   const snap = await getDoc(studentDoc(region, studentId)).catch(() => null);
-  const phone = normalizePhone((snap?.data() as Student | undefined)?.phone ?? '');
+  const phones = phoneCandidates((snap?.data() as Student | undefined)?.phone ?? '');
 
   const progressSnap = await getDocs(
     collection(db, 'regions', region, 'students', studentId, 'progress')
@@ -163,7 +189,7 @@ export async function deleteStudent(region: string, studentId: string): Promise<
   await deleteDoc(studentDoc(region, studentId));
   await deleteDoc(publicDoc(region, studentId)).catch(() => undefined);
   await deleteDoc(indexDoc(studentId)).catch(() => undefined);
-  if (phone) await deleteDoc(indexDoc(phone)).catch(() => undefined);
+  for (const key of phones) await deleteDoc(indexDoc(key)).catch(() => undefined);
 }
 
 /** 批次刪除（同時清掉進度與登入索引） */
@@ -418,7 +444,9 @@ export async function importRoster(
         { merge: true }
       );
       batch.set(indexDoc(studentId), index, { merge: true });
-      if (row.phone) batch.set(indexDoc(row.phone), index, { merge: true });
+      for (const key of phoneCandidates(row.phone)) {
+        if (key) batch.set(indexDoc(key), index, { merge: true });
+      }
       batch.set(
         publicDoc(region, studentId),
         {

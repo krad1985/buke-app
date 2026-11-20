@@ -104,11 +104,12 @@ export default function LessonView({ course, initialProgress, onSaveProgress, on
         }
         setReady(true);
       },
-      onStateChange: () => {
+      onStateChange: (isPlaying) => {
+        setPlaying(isPlaying);
         const t = playerRef.current?.getCurrentTime() ?? 0;
         setCurrentTime(t);
-        setPlaying(true);
       },
+      onEnded: () => setPhase((p) => (p === 'playing' ? 'quiz' : p)),
       onError: (message) => setLoadError(message),
     })
       .then((handle) => {
@@ -249,7 +250,8 @@ export default function LessonView({ course, initialProgress, onSaveProgress, on
           (s) =>
             s.groupLarge === student.groupLarge &&
             s.groupSmall === student.groupSmall &&
-            (s.groupLarge !== '' || s.groupSmall !== '')
+            (s.groupLarge !== '' || s.groupSmall !== '') &&
+            (!course.seriesId || (s.seriesIds ?? []).includes(course.seriesId))
         );
         setPeerCount(Math.max(same.length - 1, 0));
       })
@@ -272,7 +274,8 @@ export default function LessonView({ course, initialProgress, onSaveProgress, on
         (s) =>
           s.groupLarge === student.groupLarge &&
           s.groupSmall === student.groupSmall &&
-          (s.groupLarge !== '' || s.groupSmall !== '')
+          (s.groupLarge !== '' || s.groupSmall !== '') &&
+          (!course.seriesId || (s.seriesIds ?? []).includes(course.seriesId))
       );
       const progress = await loadCourseProgresses(
         student.region,

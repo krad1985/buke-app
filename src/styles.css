@@ -1701,3 +1701,21 @@ textarea.input {
   color: var(--ink);
   background: #f7f5ef;
 }
+.series-block {
+  margin-bottom: 26px;
+}
+
+.series-title {
+  font-size: 15px;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  margin-bottom: 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--line);
+}
+
+.card h3 {
+  font-size: 17px;
+  margin-bottom: 6px;
+  line-height: 1.45;
+}

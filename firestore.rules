@@ -74,16 +74,20 @@ service cloud.firestore {
       allow list: if isAdmin();
 
       // 自助註冊（只能建立自己的「待核准、無權限」）；
-      // 例外：尚未 bootstrap 時允許建立第一位總管理員
-      allow create: if signedIn() && request.auth.uid == uid && (
+      // 管理員可代建任何帳號；尚未 bootstrap 時允許建立第一位總管理員
+      allow create: if (
         (
-          request.resource.data.superAdmin == false
+          signedIn()
+          && request.auth.uid == uid
+          && request.resource.data.superAdmin == false
           && request.resource.data.pending == true
           && request.resource.data.enabled == false
           && request.resource.data.grants.size() == 0
         )
+        || isSuper()
         || (
           !bootstrapped()
+          && signedIn()
           && request.resource.data.superAdmin == true
         )
       );

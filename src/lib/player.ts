@@ -1,4 +1,4 @@
-import { loadYouTubeApi, type YTPlayer } from './youtube';
+﻿import { loadYouTubeApi, type YTPlayer } from './youtube';
 import type { VideoRef } from './video';
 
 export interface PlayerHandle {
@@ -18,7 +18,8 @@ interface Options {
   startAt: number;
   rate: number;
   onReady: (duration: number) => void;
-  onStateChange: () => void;
+  onStateChange: (playing: boolean) => void;
+  onEnded: () => void;
   onError: (message: string) => void;
 }
 
@@ -93,7 +94,10 @@ async function createYouTubePlayer(opts: Options): Promise<PlayerHandle> {
         e.target.pauseVideo();
         opts.onReady(Number.isFinite(d) ? d : 0);
       },
-      onStateChange: () => opts.onStateChange(),
+      onStateChange: (e: { data: number }) => {
+        opts.onStateChange(e.data === 1);
+        if (e.data === 0) opts.onEnded();
+      },
       onError: (e: { data: number }) => opts.onError(YT_ERRORS[e.data] ?? '影片載入失敗。'),
     },
   });
@@ -171,9 +175,12 @@ async function createVimeoPlayer(opts: Options): Promise<PlayerHandle> {
   const timer = window.setInterval(tick, 250);
 
   player.on('timeupdate', () => tick());
-  player.on('play', () => opts.onStateChange());
-  player.on('pause', () => opts.onStateChange());
-  player.on('ended', () => opts.onStateChange());
+  player.on('play', () => opts.onStateChange(true));
+  player.on('pause', () => opts.onStateChange(false));
+  player.on('ended', () => {
+    opts.onStateChange(false);
+    opts.onEnded();
+  });
   player.on('error', () =>
     opts.onError(
       'Vimeo 無法播放：影片可能設為「僅限特定網域嵌入」。請管理者把隱私改成「任何知道連結的人」，或把本網域加入允許清單。'

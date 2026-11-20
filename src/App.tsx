@@ -9,7 +9,8 @@ import { listAllCourses } from './lib/coursesRepo';
 import { emptyProgress, loadAllLocal, saveLocal } from './lib/progress';
 import { loadAllProgress, saveProgressFor } from './lib/progressRepo';
 import { loadSettings, DEFAULT_SETTINGS } from './lib/settings';
-import type { AppSettings, Course, CourseProgress, Student } from './types';
+import { listSeries } from './lib/series';
+import type { AppSettings, Course, CourseProgress, Series, Student } from './types';
 
 type Route = { view: 'list' } | { view: 'course'; id: string } | { view: 'admin' };
 
@@ -40,6 +41,7 @@ export default function App() {
   const [progress, setProgress] = useState<Record<string, CourseProgress>>({});
   const [loadError, setLoadError] = useState<string | null>(null);
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
+  const [seriesList, setSeriesList] = useState<Series[]>([]);
 
   useEffect(() => {
     const onHash = () => setRoute(parseRoute());
@@ -69,6 +71,9 @@ export default function App() {
   useEffect(() => {
     loadSettings()
       .then(setSettings)
+      .catch(() => undefined);
+    listSeries()
+      .then(setSeriesList)
       .catch(() => undefined);
   }, []);
 
@@ -215,7 +220,7 @@ export default function App() {
                 </p>
               </div>
             )}
-            <CourseList courses={published} progress={progress} onSelect={open} />
+            <CourseList courses={published} seriesList={seriesList} progress={progress} onSelect={open} />
           </>
         )}
       </main>
