@@ -394,6 +394,7 @@ export async function backfillRosters(): Promise<number> {
         { ...publicPayload({ ...s, region: r.id }), seriesIds: s.seriesIds ?? [] },
         { merge: true }
       );
+      await writeIndexes(s);
       total += 1;
     }
   }
